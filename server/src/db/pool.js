@@ -3,6 +3,15 @@ import { config } from '../config.js';
 
 const { Pool } = pg;
 
+// OID 1082 = DATE. node-postgres's default parser builds a local-time Date
+// object, so on any machine whose local timezone isn't UTC a plain calendar
+// date silently shifts by a day once serialised to JSON (bit us on Day 3's
+// leave dates). A DATE has no timezone by definition - keep it exactly as
+// the 'YYYY-MM-DD' string Postgres already sent. Do NOT do this for
+// timestamptz (OID 1184) - those must stay real Date objects, since they
+// represent an absolute instant, not a plain calendar date.
+pg.types.setTypeParser(1082, (value) => value);
+
 export const pool = new Pool({
   connectionString: config.db.url,
   max: config.db.poolMax,

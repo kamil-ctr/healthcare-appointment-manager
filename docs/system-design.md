@@ -48,7 +48,24 @@ Re-booking, not un-cancelling, is the correct path back to a confirmed slot.
 
 ## 3. Slot hold mechanism
 
-_To be written on day 4._
+Booking is two-phase - hold, then confirm - because a patient needs a window to fill in
+details (and, from day 5, a symptom form) before the slot is final. A single-phase
+insert-and-done would either lock the slot forever on an abandoned form or force a
+mid-flow re-check, reopening the exact race the unique index exists to close.
+
+`hold_expires_at` lives on the `appointments` row, not in memory or Redis, because that row
+is already the source of truth for slot ownership: `unique_active_appointment`
+(`WHERE status IN ('held','confirmed')`) has to know a hold's deadline to decide if it's
+still active. An in-memory timer drifts across restarts and vanishes on a crash; a Redis
+TTL would need to stay consistent with the row across two systems for no real benefit.
+
+Because the index is partial, an expired or cancelled appointment simply stops matching
+its `WHERE` clause the instant its status changes - bookable again immediately, no cleanup.
+
+The sweep (`status='held' AND hold_expires_at < now()` -> `'expired'`) runs both on an
+in-process interval and behind `POST /api/internal/jobs/tick`, guarded by a shared secret,
+so a free-tier host that sleeps idle instances can still be driven by an external cron
+pinger hitting the same endpoint.
 
 ## 4. Notification failure handling
 

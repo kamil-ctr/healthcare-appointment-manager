@@ -14,9 +14,12 @@ All responses are JSON. Errors share one shape:
 | 401 | `UNAUTHORIZED` | Missing or invalid token |
 | 403 | `FORBIDDEN` | Wrong role for this route |
 | 404 | `NOT_FOUND` | No such resource or route |
-| 409 | `CONFLICT` | Slot taken, stale hold |
+| 409 | `CONFLICT` | Resource is not in a state that allows this action |
 | 409 | `EMAIL_TAKEN` | Registration email already in use (case-insensitive) |
-| 503 | `SERVICE_UNAVAILABLE` | Database or upstream provider unreachable |
+| 409 | `SLOT_TAKEN` | Another appointment already holds/confirms that doctor+time |
+| 409 | `PATIENT_BUSY` | Patient already holds/confirms a different doctor at that instant |
+| 409 | `HOLD_EXPIRED` | The hold window passed before confirm |
+| 503 | `SERVICE_UNAVAILABLE` | Database/upstream provider unreachable, or a required secret unset |
 
 Authenticated routes expect `Authorization: Bearer <jwt>`.
 
@@ -206,6 +209,115 @@ Same query semantics and response shape as the admin list above.
 Same shape as the admin detail route above. `404 NOT_FOUND` if the doctor doesn't exist
 **or is deactivated** - deactivated doctors are invisible outside the admin portal.
 
+### `GET /api/doctors/:id/slots?from=&to=`
+`from`/`to` are `YYYY-MM-DD`, inclusive. Default to the next 7 days when omitted. Max span
+is 30 days. All date/time maths happens in the doctor's own timezone (see
+`docs/system-design.md` §3) - a slot's calendar-date key is never re-derived from its UTC
+instant, so it can never drift across a UTC day boundary.
+
+Response `200`:
+```json
+{ "slots": {
+    "2026-08-21": [
+      { "startsAt": "2026-08-21T00:30:00.000Z", "endsAt": "2026-08-21T01:30:00.000Z",
+        "available": true, "reason": null },
+      { "startsAt": "2026-08-21T15:30:00.000Z", "endsAt": "2026-08-21T16:30:00.000Z",
+        "available": false, "reason": "taken" }
+    ]
+} }
+```
+Taken slots (booked `held`/`confirmed`) are returned greyed-out (`available: false,
+reason: "taken"`), never omitted - showing scarcity honestly is intentional. Days that fall
+on a `doctor_leave` date, or have no matching `doctor_availability` block, simply have no
+key in the response.
+
+Errors: `400 BAD_REQUEST` (`from`/`to` malformed, span > 30 days), `404 NOT_FOUND` (doctor
+missing or deactivated).
+
+---
+
+## Appointments
+
+Requires `Authorization: Bearer <jwt>`. The client-supplied slot is never trusted - every
+write re-derives doctor existence/activity, grid alignment, leave days, and the booking
+horizon from the database before touching `appointments`.
+
+### `POST /api/appointments/hold`
+`patient` only.
+
+Request: `{ "doctorId": "...", "startsAt": "2026-08-21T15:30:00.000Z" }`
+
+Response `201`: `{ "appointmentId", "startsAt", "endsAt", "holdExpiresAt", "holdSeconds" }`
+
+Errors: `400 BAD_REQUEST` (doctor missing/inactive, `startsAt` invalid/in the
+past/beyond the 30-day horizon/off the availability grid/on a leave day),
+`409 SLOT_TAKEN` (another appointment already holds/confirms that doctor+time - resolved by
+`unique_active_appointment`, never a pre-check `SELECT`), `409 PATIENT_BUSY` (the same
+patient already holds/confirms a **different** doctor at that exact instant - resolved by
+`unique_active_patient_slot`).
+
+### `POST /api/appointments/:id/confirm`
+`patient`, owner only.
+
+Response `200`: `{ "appointmentId", "status": "confirmed", "startsAt", "endsAt" }`. In the
+same transaction, enqueues `email/booking_confirmation` and `calendar/event_create` outbox
+rows for both patient and doctor - nothing is sent inline.
+
+Errors: `404 NOT_FOUND`, `403 FORBIDDEN` (not your appointment), `409 CONFLICT` (not
+currently `held` - e.g. confirming a second time), `409 HOLD_EXPIRED` (hold window passed).
+
+### `POST /api/appointments/:id/cancel`
+`patient` or `doctor`, own appointments only.
+
+Request: `{ "reason": "..." }` (optional).
+
+Response `200`: `{ "appointmentId", "status": "cancelled_by_patient" | "cancelled_by_doctor" }`.
+Enqueues `email/booking_cancelled` for both parties and `calendar/event_delete` for every
+active `calendar_events` row. Because `unique_active_appointment` is partial, the slot is
+bookable again the instant this commits - no separate cleanup step.
+
+Errors: `404 NOT_FOUND`, `403 FORBIDDEN` (not your appointment), `409 CONFLICT` (not
+`held`/`confirmed`).
+
+### `POST /api/appointments/:id/reschedule`
+`patient` only, owner only.
+
+Request: `{ "startsAt": "2026-08-21T21:00:00.000Z" }`
+
+Response `201`: `{ "appointmentId", "startsAt", "endsAt", "holdExpiresAt", "holdSeconds",
+"rescheduledFrom" }` - a **new** `held` row; the old row is cancelled
+(`cancel_reason: "Rescheduled"`) with `rescheduled_from` pointing back to it. Enqueues
+`calendar/event_update` (carrying the existing `google_event_id`) for every party with an
+active calendar event.
+
+Errors: same as hold, plus `404 NOT_FOUND` / `403 FORBIDDEN` / `409 CONFLICT` for the old
+appointment.
+
+### `GET /api/appointments?status=&from=&to=`
+Patients see only their own; doctors see only their own; admins see all. `status` filters
+exactly; `from`/`to` filter `starts_at`. Newest first.
+
+Response `200`: `{ "appointments": [ { "id", "status", "startsAt", "endsAt", "reason",
+"cancelReason", "holdExpiresAt", "rescheduledFrom", "doctorId", "doctorName",
+"doctorSpecialisation", "patientName" } ] }`
+
+---
+
+## Internal (cron trigger)
+
+No user JWT - authenticated by a shared secret instead, so an external cron pinger can
+drive the sweep on hosting tiers that sleep idle instances between requests.
+
+### `POST /api/internal/jobs/tick`
+Header: `x-job-secret: <config.jobs.secret>` (compared with `crypto.timingSafeEqual`).
+Currently runs the hold-expiry sweep (`status='held' AND hold_expires_at < now()` ->
+`'expired'`); the Day 6 outbox worker plugs into the same tick.
+
+Response `200`: `{ "expiredHolds": 3 }`
+
+Errors: `401 UNAUTHORIZED` (wrong secret), `503 SERVICE_UNAVAILABLE` (`JOB_TRIGGER_SECRET`
+not configured on this deployment).
+
 ---
 
 ## Planned routes
@@ -214,10 +326,6 @@ Documented as each lands.
 
 | Day | Method | Path | Role |
 |---|---|---|---|
-| 4 | GET | `/doctors/:id/slots?date=` | patient |
-| 4 | POST | `/appointments/hold` | patient |
-| 4 | POST | `/appointments/:id/confirm` | patient |
-| 4 | POST | `/appointments/:id/cancel` | patient/doctor |
 | 5 | POST | `/appointments/:id/symptoms` | patient |
 | 5 | GET | `/appointments/:id/pre-visit-summary` | doctor |
 | 7 | GET | `/google/connect` | any |

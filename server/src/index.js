@@ -1,6 +1,7 @@
 import { createApp } from './app.js';
 import { config } from './config.js';
 import { closePool } from './db/pool.js';
+import { startJobRunner, stopJobRunner } from './jobs/runner.js';
 
 const app = createApp();
 const server = app.listen(config.port, () => {
@@ -9,6 +10,8 @@ const server = app.listen(config.port, () => {
   console.log(`[server] readiness: http://localhost:${config.port}/api/health/db`);
 });
 
+startJobRunner();
+
 /**
  * Graceful shutdown: stop accepting connections, then close the pool.
  * Matters on free hosting tiers, which restart containers often - an
@@ -16,6 +19,7 @@ const server = app.listen(config.port, () => {
  */
 async function shutdown(signal) {
   console.log(`[server] ${signal} received, shutting down`);
+  stopJobRunner();
   server.close(async () => {
     await closePool().catch(() => {});
     process.exit(0);

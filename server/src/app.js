@@ -3,6 +3,8 @@ import { healthRouter } from './routes/health.js';
 import { authRouter } from './routes/auth.js';
 import { adminRouter } from './routes/admin.js';
 import { doctorsRouter } from './routes/doctors.js';
+import { appointmentsRouter } from './routes/appointments.js';
+import { internalRouter } from './routes/internal.js';
 import {
   cors,
   requestId,
@@ -27,7 +29,8 @@ export function createApp() {
   app.use('/api/auth', authRouter);
   app.use('/api/admin', adminRouter);
   app.use('/api/doctors', doctorsRouter);
-  // Day 4+: app.use('/api/appointments', appointmentRouter);
+  app.use('/api/appointments', appointmentsRouter);
+  app.use('/api/internal', internalRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

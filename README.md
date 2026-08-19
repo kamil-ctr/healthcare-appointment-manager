@@ -5,9 +5,9 @@ Patients book slots and submit symptoms in advance; an LLM produces a pre-visit 
 urgency level for the doctor and a patient-friendly summary after the visit. Both sides are kept
 informed through email and Google Calendar.
 
-> **Status:** Day 3 of 10 — admin portal: doctor CRUD, weekly availability with
-> never-partially-applied validation, and the timezone-correct leave cascade. See
-> [Roadmap](#roadmap) for what lands next.
+> **Status:** Day 4 of 10 — booking engine (timezone-correct slot generation, hold →
+> confirm, cancel, reschedule, hold-expiry sweep) and a full patient-facing frontend
+> with its own design system. See [Roadmap](#roadmap) for what lands next.
 
 ---
 
@@ -17,7 +17,7 @@ informed through email and Google Calendar.
 |---|---|
 | Backend | Node.js 20+ / Express, ES modules |
 | Database | PostgreSQL (raw SQL, no ORM) |
-| Frontend | React 18 + Vite, plain CSS |
+| Frontend | React 18 + Vite + react-router-dom, Tailwind CSS v4 (`@theme` design tokens) |
 | Auth | JWT signed with `node:crypto` HMAC; passwords hashed with scrypt |
 | Email | Nodemailer over SMTP |
 | Calendar | Google Calendar REST API + OAuth 2.0 via native `fetch` |
@@ -217,7 +217,7 @@ patient and doctor.
 | 1 | Repo, schema, DB layer, health checks | ✅ done |
 | 2 | Auth: register/login, scrypt, JWT, role middleware, admin seed | ✅ done |
 | 3 | Admin portal: doctor CRUD, availability, leave days | ✅ done |
-| 4 | Slot generation, hold/confirm flow, **concurrency test** | |
+| 4 | Slot generation, hold/confirm flow, **concurrency test** | ✅ done |
 | 5 | Symptom form, pre-visit LLM summary, doctor queue | |
 | 6 | Outbox worker, Nodemailer, booking/cancellation emails | |
 | 7 | Google Calendar OAuth, create/update/delete events | |

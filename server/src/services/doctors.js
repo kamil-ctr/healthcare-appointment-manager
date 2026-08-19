@@ -110,11 +110,10 @@ export async function getDoctorDetail(doctorId, { requireActive = false } = {}) 
     [doctorId]
   );
 
-  // to_char, not the bare column: node-postgres parses DATE with the local
-  // (non-UTC) Date constructor, which silently shifts the value by a day
-  // once JSON-serialized on any host whose local timezone isn't UTC.
+  // DATE columns come back as plain 'YYYY-MM-DD' strings - see the
+  // pg.types.setTypeParser(1082, ...) call in db/pool.js.
   const upcomingLeave = await many(
-    `SELECT to_char(leave_date, 'YYYY-MM-DD') AS "date", reason
+    `SELECT leave_date AS "date", reason
        FROM doctor_leave
       WHERE doctor_id = $1 AND leave_date >= CURRENT_DATE
       ORDER BY leave_date`,

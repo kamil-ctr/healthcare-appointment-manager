@@ -1,23 +1,19 @@
 import { useEffect, useState } from 'react';
-import { useAuth } from './AuthContext.jsx';
+import { useAuth } from '../../AuthContext.jsx';
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const input = 'rounded-[var(--radius-card)] border border-line px-3 py-2 text-sm outline-none focus:border-primary';
+const label = 'flex flex-col gap-1 text-sm';
+const linkBtn = 'text-sm text-primary underline hover:no-underline';
+const primaryBtn =
+  'rounded-[var(--radius-card)] bg-primary px-4 py-2 text-sm text-white transition-colors hover:bg-primary/90 disabled:opacity-60';
 
-export default function AdminApp() {
-  const { auth, logout } = useAuth();
+export default function AdminDoctors() {
   const [view, setView] = useState({ name: 'list' });
 
   return (
-    <main className="shell wide">
-      <header className="topbar">
-        <h1>Admin - Doctors</h1>
-        <div>
-          <span className="muted">{auth.user.email}</span>
-          <button className="link" onClick={logout}>
-            Sign out
-          </button>
-        </div>
-      </header>
+    <main className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
+      <h1 className="mb-6 text-2xl">Admin - Doctors</h1>
 
       {view.name === 'list' && (
         <DoctorsList
@@ -52,8 +48,8 @@ function DoctorsList({ onCreate, onSelect }) {
 
   return (
     <section>
-      <div className="row-between">
-        <label className="inline">
+      <div className="mb-4 flex items-center justify-between">
+        <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
             checked={includeInactive}
@@ -61,45 +57,49 @@ function DoctorsList({ onCreate, onSelect }) {
           />
           Show deactivated
         </label>
-        <button onClick={onCreate}>+ New doctor</button>
+        <button onClick={onCreate} className={primaryBtn}>
+          + New doctor
+        </button>
       </div>
 
-      {state.status === 'loading' && <p className="muted">Loading...</p>}
-      {state.status === 'error' && <p className="error">{state.message}</p>}
+      {state.status === 'loading' && <p className="text-sm text-ink/60">Loading...</p>}
+      {state.status === 'error' && <p className="text-sm text-urgent">{state.message}</p>}
       {state.status === 'ok' && (
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Specialisation</th>
-              <th>Email</th>
-              <th>Status</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {state.doctors.map((d) => (
-              <tr key={d.id}>
-                <td>{d.fullName}</td>
-                <td>{d.specialisation}</td>
-                <td>{d.email}</td>
-                <td>{d.isActive ? 'active' : 'deactivated'}</td>
-                <td>
-                  <button className="link" onClick={() => onSelect(d.id)}>
-                    View
-                  </button>
-                </td>
+        <div className="overflow-x-auto rounded-[var(--radius-card)] border border-line bg-surface">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-line text-ink/60">
+                <th className="px-4 py-2 font-medium">Name</th>
+                <th className="px-4 py-2 font-medium">Specialisation</th>
+                <th className="px-4 py-2 font-medium">Email</th>
+                <th className="px-4 py-2 font-medium">Status</th>
+                <th className="px-4 py-2" />
               </tr>
-            ))}
-            {state.doctors.length === 0 && (
-              <tr>
-                <td colSpan={5} className="muted">
-                  No doctors yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {state.doctors.map((d) => (
+                <tr key={d.id} className="border-b border-line last:border-0">
+                  <td className="px-4 py-2">{d.fullName}</td>
+                  <td className="px-4 py-2">{d.specialisation}</td>
+                  <td className="px-4 py-2">{d.email}</td>
+                  <td className="px-4 py-2">{d.isActive ? 'active' : 'deactivated'}</td>
+                  <td className="px-4 py-2">
+                    <button className={linkBtn} onClick={() => onSelect(d.id)}>
+                      View
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {state.doctors.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-3 text-ink/60">
+                    No doctors yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );
@@ -149,53 +149,67 @@ function CreateDoctorForm({ onCancel, onCreated }) {
 
   return (
     <section>
-      <button className="link" onClick={onCancel}>
+      <button className={linkBtn} onClick={onCancel}>
         &larr; Back to list
       </button>
-      <h2>New doctor</h2>
-      <form className="form" onSubmit={handleSubmit}>
-        <label>
+      <h2 className="my-3 text-lg">New doctor</h2>
+      <form className="flex max-w-lg flex-col gap-4" onSubmit={handleSubmit}>
+        <label className={label}>
           Email
-          <input type="email" value={form.email} onChange={set('email')} required />
+          <input type="email" value={form.email} onChange={set('email')} required className={input} />
         </label>
-        <label>
+        <label className={label}>
           Temporary password
-          <input type="password" value={form.password} onChange={set('password')} required />
+          <input type="password" value={form.password} onChange={set('password')} required className={input} />
         </label>
-        <label>
+        <label className={label}>
           Full name
-          <input value={form.fullName} onChange={set('fullName')} required />
+          <input value={form.fullName} onChange={set('fullName')} required className={input} />
         </label>
-        <label>
+        <label className={label}>
           Phone
-          <input value={form.phone} onChange={set('phone')} />
+          <input value={form.phone} onChange={set('phone')} className={input} />
         </label>
-        <label>
+        <label className={label}>
           Specialisation
-          <input value={form.specialisation} onChange={set('specialisation')} required />
+          <input value={form.specialisation} onChange={set('specialisation')} required className={input} />
         </label>
-        <label>
+        <label className={label}>
           Qualification
-          <input value={form.qualification} onChange={set('qualification')} />
+          <input value={form.qualification} onChange={set('qualification')} className={input} />
         </label>
-        <label>
+        <label className={label}>
           Consultation fee
-          <input type="number" min="0" step="0.01" value={form.consultationFee} onChange={set('consultationFee')} />
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={form.consultationFee}
+            onChange={set('consultationFee')}
+            className={input}
+          />
         </label>
-        <label>
+        <label className={label}>
           Slot length (minutes)
-          <input type="number" min="5" max="240" value={form.slotMinutes} onChange={set('slotMinutes')} />
+          <input
+            type="number"
+            min="5"
+            max="240"
+            value={form.slotMinutes}
+            onChange={set('slotMinutes')}
+            className={input}
+          />
         </label>
-        <label>
+        <label className={label}>
           Timezone
-          <input value={form.timezone} onChange={set('timezone')} />
+          <input value={form.timezone} onChange={set('timezone')} className={input} />
         </label>
-        <label>
+        <label className={label}>
           Bio
-          <textarea value={form.bio} onChange={set('bio')} />
+          <textarea value={form.bio} onChange={set('bio')} className={input} />
         </label>
-        {error && <p className="error">{error}</p>}
-        <button type="submit" disabled={busy}>
+        {error && <p className="text-sm text-urgent">{error}</p>}
+        <button type="submit" disabled={busy} className={primaryBtn}>
           {busy ? 'Creating...' : 'Create doctor'}
         </button>
       </form>
@@ -224,24 +238,27 @@ function DoctorDetail({ doctorId, onBack }) {
     reload();
   }
 
-  if (state.status === 'loading') return <p className="muted">Loading...</p>;
-  if (state.status === 'error') return <p className="error">{state.message}</p>;
+  if (state.status === 'loading') return <p className="text-sm text-ink/60">Loading...</p>;
+  if (state.status === 'error') return <p className="text-sm text-urgent">{state.message}</p>;
 
   const { doctor } = state;
 
   return (
     <section>
-      <button className="link" onClick={onBack}>
+      <button className={linkBtn} onClick={onBack}>
         &larr; Back to list
       </button>
-      <h2>
-        {doctor.fullName} <span className="muted">({doctor.specialisation})</span>
+      <h2 className="mt-3 text-lg">
+        {doctor.fullName} <span className="text-ink/60">({doctor.specialisation})</span>
       </h2>
-      <p className="muted">
+      <p className="mb-3 text-sm text-ink/60">
         {doctor.email} - {doctor.isActive ? 'active' : 'deactivated'}
       </p>
       {doctor.isActive && (
-        <button className="danger" onClick={handleDeactivate}>
+        <button
+          onClick={handleDeactivate}
+          className="rounded-[var(--radius-card)] border border-urgent px-3 py-1.5 text-sm text-urgent hover:bg-urgent/5"
+        >
           Deactivate doctor
         </button>
       )}
@@ -315,38 +332,40 @@ function AvailabilityEditor({ doctorId, availability, onSaved }) {
   }
 
   return (
-    <div className="panel">
-      <h3>Weekly availability</h3>
-      {WEEKDAYS.map((label, weekday) => (
-        <div className="weekday-row" key={weekday}>
-          <span className="weekday-label">{label}</span>
-          <div className="weekday-blocks">
+    <div className="mt-6 rounded-[var(--radius-card)] border border-line bg-surface p-5">
+      <h3 className="mb-3 text-base">Weekly availability</h3>
+      {WEEKDAYS.map((wLabel, weekday) => (
+        <div className="flex gap-4 border-b border-line py-2 last:border-0" key={weekday}>
+          <span className="w-24 shrink-0 pt-1.5 text-sm text-ink/70">{wLabel}</span>
+          <div className="flex flex-col gap-1.5">
             {byWeekday[weekday].map((block, index) => (
-              <span className="block-inputs" key={index}>
+              <span className="flex items-center gap-2" key={index}>
                 <input
                   type="time"
                   value={block.startTime}
                   onChange={(e) => updateBlock(weekday, index, 'startTime', e.target.value)}
+                  className={input}
                 />
-                <span>to</span>
+                <span className="text-sm text-ink/60">to</span>
                 <input
                   type="time"
                   value={block.endTime}
                   onChange={(e) => updateBlock(weekday, index, 'endTime', e.target.value)}
+                  className={input}
                 />
-                <button className="link" type="button" onClick={() => removeBlock(weekday, index)}>
+                <button className={linkBtn} type="button" onClick={() => removeBlock(weekday, index)}>
                   remove
                 </button>
               </span>
             ))}
-            <button className="link" type="button" onClick={() => addBlock(weekday)}>
+            <button className={linkBtn} type="button" onClick={() => addBlock(weekday)}>
               + add block
             </button>
           </div>
         </div>
       ))}
-      {error && <p className="error">{error}</p>}
-      <button onClick={handleSave} disabled={busy}>
+      {error && <p className="mt-2 text-sm text-urgent">{error}</p>}
+      <button onClick={handleSave} disabled={busy} className={`${primaryBtn} mt-4`}>
         {busy ? 'Saving...' : 'Save availability'}
       </button>
     </div>
@@ -388,36 +407,36 @@ function LeaveForm({ doctorId, upcomingLeave, onSaved }) {
   }
 
   return (
-    <div className="panel">
-      <h3>Mark a leave day</h3>
-      <form className="form inline-form" onSubmit={handleSubmit}>
-        <label>
+    <div className="mt-6 rounded-[var(--radius-card)] border border-line bg-surface p-5">
+      <h3 className="mb-3 text-base">Mark a leave day</h3>
+      <form className="mb-3 flex flex-wrap items-end gap-3" onSubmit={handleSubmit}>
+        <label className={`${label} flex-1`}>
           Date
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className={input} />
         </label>
-        <label>
+        <label className={`${label} flex-1`}>
           Reason
-          <input value={reason} onChange={(e) => setReason(e.target.value)} />
+          <input value={reason} onChange={(e) => setReason(e.target.value)} className={input} />
         </label>
-        <button type="submit" disabled={busy}>
+        <button type="submit" disabled={busy} className={primaryBtn}>
           {busy ? 'Saving...' : 'Mark leave'}
         </button>
       </form>
-      {error && <p className="error">{error}</p>}
+      {error && <p className="text-sm text-urgent">{error}</p>}
       {result && (
-        <p className="ok">
+        <p className="text-sm text-primary">
           This cancelled {result.affectedAppointments} appointment(s) and queued{' '}
           {result.notificationsQueued} notification(s).
         </p>
       )}
 
-      <h4>Upcoming leave</h4>
-      {upcomingLeave.length === 0 && <p className="muted">None scheduled.</p>}
-      <ul className="plain-list">
+      <h4 className="mb-1 mt-4 text-sm font-medium text-ink/70">Upcoming leave</h4>
+      {upcomingLeave.length === 0 && <p className="text-sm text-ink/60">None scheduled.</p>}
+      <ul className="flex flex-col gap-1 text-sm">
         {upcomingLeave.map((l) => (
           <li key={l.date}>
-            {l.date} {l.reason && `- ${l.reason}`}{' '}
-            <button className="link" onClick={() => handleRemove(l.date)}>
+            <span className="font-data">{l.date}</span> {l.reason && `- ${l.reason}`}{' '}
+            <button className={linkBtn} onClick={() => handleRemove(l.date)}>
               remove
             </button>
           </li>

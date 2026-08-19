@@ -22,8 +22,8 @@ polish.** Do not spend effort on visual design until day 9.
 ## Hard constraints — do not violate
 
 1. **Dependency budget.** The backend has exactly three runtime dependencies:
-   `express`, `pg`, `nodemailer`. The frontend has `react`, `react-dom` (+ `vite`,
-   `@vitejs/plugin-react` as devDeps).
+   `express`, `pg`, `nodemailer`. The frontend has `react`, `react-dom`, `react-router-dom`
+   (+ `vite`, `@vitejs/plugin-react`, `tailwindcss`, `@tailwindcss/vite` as devDeps).
    **Do not `npm install` anything else.** If a task seems to need a package, implement it with
    Node built-ins instead and say so. Specifically:
    - password hashing → `node:crypto` `scrypt`, **not** `bcrypt`
@@ -99,38 +99,37 @@ Never send a raw error message from an exception to the client — the terminal 
 
 ---
 
-## Current state (end of day 2 — verified, not assumed)
+## Current state (end of day 4 — verified, not assumed)
 
 Done and tested against a real PostgreSQL 16 instance (installed locally on the developer's Mac):
 
-- `docs/schema.sql` — 13 tables, applies cleanly and is idempotent on re-run:
+- `docs/schema.sql` — 13 tables, unchanged since day 1, applies cleanly and idempotently:
   `users` · `doctors` · `doctor_availability` · `doctor_leave` · `appointments` ·
   `symptom_forms` · `visit_notes` · `prescriptions` · `ai_summaries` · `reminders` ·
   `outbox` · `google_accounts` · `calendar_events`
-- `server/src/config.js` — fail-fast env validation, all future keys declared, plus `admin`
-  section for the seed script
-- `server/src/db/pool.js` — pool + `query` / `one` / `many` / `withTransaction`
-- `server/src/db/migrate.js` — `npm run migrate`
-- `server/src/middleware/core.js` — CORS, request id, access log, 404, terminal error handler
-- `server/src/middleware/auth.js` — `requireAuth`, `requireRole(...)`
-- `server/src/lib/password.js` — async scrypt hash/verify (`scrypt$N$r$p$salt$hash`)
-- `server/src/lib/jwt.js` — hand-rolled HS256 sign/verify, distinct malformed/signature/expired
-  errors
-- `server/src/lib/validate.js` — `required` / `isEmail` / `minLength` / `oneOf`
-- `server/src/routes/health.js` — `GET /api/health` (liveness), `GET /api/health/db` (readiness,
-  503 when Postgres is down)
-- `server/src/routes/auth.js` — register/login/me, role always forced to `patient` on
-  self-registration, identical generic 401 for unknown email / wrong password / deactivated
-  account
-- `server/scripts/seed-admin.js` — idempotent admin seed from `ADMIN_EMAIL`/`ADMIN_PASSWORD`
-- `server/scripts/concurrency-check.js` — **passing**: 20 simultaneous holds on one slot →
-  1 success, 19 × `23505`, 1 row in the DB
-- `server/src/index.js` — graceful shutdown on SIGTERM/SIGINT
-- `web/` — Vite + React shell that pings both health endpoints
-- `README.md`, `docs/api.md`, `docs/system-design.md` (draft, §1 written)
+- `server/src/db/pool.js` — `pg.types.setTypeParser(1082, ...)` keeps every DATE column a
+  plain `'YYYY-MM-DD'` string app-wide, avoiding node-postgres's local-timezone `Date` parser
+- Auth (day 2): scrypt password hashing, hand-rolled HS256 JWT, `requireAuth`/`requireRole`,
+  register/login/me with identical generic failure for unknown email/wrong password/deactivated
+- Admin portal (day 3): doctor CRUD, weekly availability (never partially applied), leave
+  cascade (`services/leave.js`) - timezone-correct `AT TIME ZONE doctors.timezone` matching,
+  never a bare UTC comparison
+- Booking engine (day 4): `services/slots.js` (SQL-generated, timezone-correct grid),
+  `services/appointments.js` (hold/confirm/cancel/reschedule, concurrency resolved solely by
+  `unique_active_appointment`/`unique_active_patient_slot`, never a pre-check SELECT),
+  `jobs/runner.js` (in-process interval + `POST /api/internal/jobs/tick` for external cron)
+- `server/scripts/concurrency-check.js` — **passing**, both scenarios: direct SQL (20
+  concurrent INSERTs) and real HTTP (20 concurrent `POST /api/appointments/hold`) → 1 success,
+  19 conflicts, 1 DB row, in both
+- `web/` — Vite + React + react-router-dom + Tailwind v4 (`@theme` tokens in `index.css`).
+  Pages: `/`, `/doctors`, `/doctors/:id`, `/book/:doctorId` (date strip + slot rail + hold
+  countdown), `/appointments` (cancel/reschedule), `/login`, `/register`, `/admin/*`
+  (migrated admin portal). Verified end-to-end in a real browser, including two real
+  timezone bugs found and fixed during that testing (see docs/api.md history / git log)
+- `README.md`, `docs/api.md`, `docs/system-design.md` (§1-§3 written)
 
-**Not started:** admin portal (doctor CRUD, availability, leave), slots, LLM, email, calendar,
-jobs, deployment.
+**Not started:** symptom form, LLM summaries, outbox worker/email sending, Google Calendar
+integration, post-visit notes/prescriptions, deployment.
 
 ---
 
@@ -138,8 +137,6 @@ jobs, deployment.
 
 | Day | Scope |
 |---|---|
-| 3 | Admin portal: doctor CRUD, weekly availability, leave days |
-| 4 | Slot generation, hold → confirm flow, expiry sweep, concurrency test in CI-able form |
 | 5 | Symptom form, pre-visit LLM summary + urgency, doctor queue |
 | 6 | Outbox worker, Nodemailer, booking / cancellation / reminder emails |
 | 7 | Google Calendar OAuth 2.0, create / update / delete events for both sides |

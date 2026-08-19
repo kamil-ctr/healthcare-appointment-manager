@@ -1,0 +1,70 @@
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=Public+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #12201d;
+  --color-primary: #14675a;
+  --color-primary-50: #e8f2ef;
+  --color-line: #dce3e0;
+  --color-surface: #ffffff;
+  --color-wash: #f5f7f6;
+  --color-urgent: #a6301f;
+  --color-caution: #b4690e;
+
+  --font-display: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
+  --font-body: 'Public Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-data: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
+
+  --radius-card: 6px;
+  --radius-pill: 4px;
+
+  --default-transition-duration: 150ms;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-body);
+    color: var(--color-ink);
+    background: var(--color-wash);
+  }
+
+  body {
+    margin: 0;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    font-weight: 700;
+  }
+
+  /* Every time/date/duration/id reads in the mono face - a schedule should
+     look like a schedule. Enforced structurally in components, not just by
+     convention, wherever practical. */
+  time,
+  .data {
+    font-family: var(--font-data);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  * {
+    transition-duration: 150ms;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
