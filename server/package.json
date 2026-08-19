@@ -1,0 +1,21 @@
+{
+  "name": "healthcare-appointment-manager-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Backend API for the Healthcare Appointment & Follow-up Manager",
+  "engines": {
+    "node": ">=20.6.0"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch --env-file=.env src/index.js",
+    "migrate": "node --env-file=.env src/db/migrate.js",
+    "migrate:prod": "node src/db/migrate.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "nodemailer": "^6.10.0",
+    "pg": "^8.13.1"
+  }
+}

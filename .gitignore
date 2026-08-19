@@ -1,0 +1,32 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# environment / secrets  (.env.example IS committed, .env is not)
+.env
+.env.local
+.env.*.local
+*.pem
+credentials.json
+token.json
+
+# build artifacts
+dist/
+build/
+out/
+.next/
+.vite/
+
+# editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# logs & runtime
+logs/
+*.log
+npm-debug.log*
+coverage/
