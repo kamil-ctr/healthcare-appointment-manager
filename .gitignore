@@ -21,6 +21,7 @@ out/
 # editor / OS
 .vscode/
 .idea/
+.claude/
 *.swp
 .DS_Store
 Thumbs.db

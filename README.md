@@ -5,8 +5,8 @@ Patients book slots and submit symptoms in advance; an LLM produces a pre-visit 
 urgency level for the doctor and a patient-friendly summary after the visit. Both sides are kept
 informed through email and Google Calendar.
 
-> **Status:** Day 1 of 10 — repository, database schema, connection layer, and health checks.
-> See [Roadmap](#roadmap) for what lands next.
+> **Status:** Day 2 of 10 — auth (register/login/me), scrypt password hashing, hand-rolled
+> HS256 JWT, role middleware, idempotent admin seed. See [Roadmap](#roadmap) for what lands next.
 
 ---
 
@@ -200,7 +200,7 @@ patient and doctor.
 | Day | Scope | Status |
 |---|---|---|
 | 1 | Repo, schema, DB layer, health checks | ✅ done |
-| 2 | Auth: register/login, scrypt, JWT, role middleware, admin seed | |
+| 2 | Auth: register/login, scrypt, JWT, role middleware, admin seed | ✅ done |
 | 3 | Admin portal: doctor CRUD, availability, leave days | |
 | 4 | Slot generation, hold/confirm flow, **concurrency test** | |
 | 5 | Symptom form, pre-visit LLM summary, doctor queue | |

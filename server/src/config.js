@@ -54,6 +54,13 @@ export const config = {
     holdMinutes: int(process.env.SLOT_HOLD_MINUTES, 10),
   },
 
+  // Only consumed by scripts/seed-admin.js; the server itself never needs
+  // these, so they are not in the fail-fast REQUIRED list above.
+  admin: {
+    email: process.env.ADMIN_EMAIL || '',
+    password: process.env.ADMIN_PASSWORD || '',
+  },
+
   // Filled in on later days; declared here so the shape is visible from day 1.
   llm: {
     apiKey: process.env.LLM_API_KEY || '',
