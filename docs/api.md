@@ -92,14 +92,119 @@ Errors: `401 UNAUTHORIZED` (missing/malformed/expired/invalid-signature token - 
 return this same code with a distinct `message`), `404 NOT_FOUND` (token valid but the
 user row no longer exists).
 
-### `GET /api/admin/ping` — **temporary, Day 2 only**
-Requires `Authorization: Bearer <jwt>` for an `admin` user. Exists solely to prove
-`requireAuth` + `requireRole('admin')` work end-to-end before the real admin portal
-(Day 3) exists. **Remove once Day 3 adds real routes under `/api/admin`.**
+---
 
-Response `200`: `{ "ok": true, "role": "admin" }`
+## Admin - Doctors
 
-Errors: `401 UNAUTHORIZED` (no/invalid token), `403 FORBIDDEN` (valid token, non-admin role).
+All routes below require `Authorization: Bearer <jwt>` for an `admin` user. Every one
+returns `401 UNAUTHORIZED` with no token / an invalid or expired token, and
+`403 FORBIDDEN` for a valid token with a non-admin role - not repeated per route below.
+
+### `POST /api/admin/doctors`
+Creates a doctor account in one transaction (`users` + `doctors`). Password is hashed with
+the same `password.js` helper as patient registration.
+
+Request:
+```json
+{ "email": "dr@example.com", "password": "doctor-pass-1", "fullName": "Dr. Asha Rao",
+  "phone": "555-0200", "specialisation": "Cardiology", "qualification": "MD",
+  "consultationFee": 50, "slotMinutes": 30, "timezone": "Asia/Kolkata", "bio": "..." }
+```
+`email`, `password` (min 8 chars), `fullName` (min 2 chars), `specialisation` (min 2 chars)
+are required. `phone`, `qualification`, `bio` are optional. `consultationFee` defaults to
+`0`, `slotMinutes` to `30` (must be an integer 5-240), `timezone` to `Asia/Kolkata`.
+
+Response `201`: `{ "doctor": { "id", "email", "fullName", "phone", "isActive",
+"specialisation", "qualification", "consultationFee", "slotMinutes", "timezone", "bio" } }`
+
+Errors: `400 BAD_REQUEST` (missing/invalid fields), `409 EMAIL_TAKEN` (case-insensitive,
+same handling as patient registration).
+
+### `GET /api/admin/doctors?specialisation=&q=&includeInactive=false`
+`specialisation` matches exactly (case-insensitive). `q` free-text searches name and
+specialisation. `includeInactive=true` also returns deactivated doctors (default: active
+only).
+
+Response `200`: `{ "doctors": [ { ...same shape as create response... } ] }`
+
+### `GET /api/admin/doctors/:id`
+Response `200`: `{ "doctor": { ...profile fields, "createdAt",
+"availability": [ { "weekday", "startTime", "endTime" } ],
+"upcomingLeave": [ { "date", "reason" } ] } }`
+
+Errors: `404 NOT_FOUND`.
+
+### `PATCH /api/admin/doctors/:id`
+Partial update. Editable: `fullName`, `phone`, `specialisation`, `qualification`,
+`consultationFee`, `slotMinutes`, `timezone`, `bio`. **`email` and `role` are never
+editable through this route** - any such fields in the body are silently ignored.
+
+Response `200`: `{ "doctor": { ...full detail, same shape as GET :id... } }`
+
+Errors: `400 BAD_REQUEST` (no editable fields provided), `404 NOT_FOUND`.
+
+### `DELETE /api/admin/doctors/:id`
+Soft deactivate (`users.is_active = false`). **Never a hard delete** - appointments
+reference this row.
+
+Response `200`: `{ "futureActiveAppointments": 3 }` - the count of `held`/`confirmed`
+appointments still in the future, so the admin can see the impact before/after.
+
+Errors: `404 NOT_FOUND`.
+
+### `PUT /api/admin/doctors/:id/availability`
+Replaces the doctor's entire weekly schedule in one transaction (delete all, insert the new
+set) - never a partial apply.
+
+Request body is a raw array: `[ { "weekday": 1, "startTime": "09:00", "endTime": "12:00" } ]`
+(`weekday` 0=Sunday..6=Saturday, times `HH:MM`).
+
+Response `200`: `{ "availability": [ ...the new set, as stored... ] }`
+
+Errors: `400 BAD_REQUEST` with `details.blocks` - an array of `{ index, reason }` naming
+every offending block by its position in the request array. Triggered by: malformed
+weekday/time, `endTime <= startTime`, a duration that isn't a whole multiple of the
+doctor's `slotMinutes`, or two blocks overlapping on the same weekday. **The whole payload
+is rejected together** - a rejected request never changes any stored availability.
+`404 NOT_FOUND`.
+
+### `POST /api/admin/doctors/:id/leave`
+Records a full-day leave and, in the same transaction, cancels every `held`/`confirmed`
+appointment that falls on that date **in the doctor's own timezone** (not UTC - see
+`docs/system-design.md` §2) and queues their notifications as `outbox` rows.
+
+Request: `{ "date": "2026-08-27", "reason": "Conference" }` (`reason` optional).
+
+Response `201`: `{ "leaveDate": "2026-08-27", "affectedAppointments": 2,
+"notificationsQueued": 3 }`
+
+Errors: `400 BAD_REQUEST` (missing/malformed `date`), `409 CONFLICT` (leave already recorded
+for this doctor and date - **no side effects at all**, the whole transaction rolls back
+before any appointment is touched), `404 NOT_FOUND` (no such doctor).
+
+### `DELETE /api/admin/doctors/:id/leave/:date`
+Removes the leave record for that date. **Does NOT resurrect any appointment it cancelled** -
+patients have already been notified their slot is gone (or the notification is already
+queued), so silently reviving the appointment would contradict a message already sent.
+Re-booking is the correct path back to a confirmed slot, not un-cancelling.
+
+Response `200`: `{ "removed": true }`
+
+Errors: `404 NOT_FOUND` (no leave recorded for that doctor/date).
+
+---
+
+## Doctors (read-only)
+
+Requires `Authorization: Bearer <jwt>` for **any** authenticated role.
+
+### `GET /api/doctors?specialisation=&q=`
+Active doctors only - a deactivated doctor never appears here, regardless of role.
+Same query semantics and response shape as the admin list above.
+
+### `GET /api/doctors/:id`
+Same shape as the admin detail route above. `404 NOT_FOUND` if the doctor doesn't exist
+**or is deactivated** - deactivated doctors are invisible outside the admin portal.
 
 ---
 
@@ -109,11 +214,6 @@ Documented as each lands.
 
 | Day | Method | Path | Role |
 |---|---|---|---|
-| 3 | POST | `/admin/doctors` | admin |
-| 3 | PATCH | `/admin/doctors/:id` | admin |
-| 3 | PUT | `/admin/doctors/:id/availability` | admin |
-| 3 | POST | `/admin/doctors/:id/leave` | admin |
-| 4 | GET | `/doctors?specialisation=` | patient |
 | 4 | GET | `/doctors/:id/slots?date=` | patient |
 | 4 | POST | `/appointments/hold` | patient |
 | 4 | POST | `/appointments/:id/confirm` | patient |

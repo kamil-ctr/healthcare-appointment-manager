@@ -6,6 +6,7 @@
 import { badRequest } from './errors.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Throws if any of `fields` is missing, null, or an empty string on `body`. */
 export function required(body, fields) {
@@ -33,5 +34,11 @@ export function minLength(value, min, field) {
 export function oneOf(value, allowed, field) {
   if (!allowed.includes(value)) {
     throw badRequest(`${field} must be one of: ${allowed.join(', ')}.`, { fields: [field] });
+  }
+}
+
+export function isDateString(value, field) {
+  if (typeof value !== 'string' || !DATE_RE.test(value)) {
+    throw badRequest(`${field} must be an ISO date string (YYYY-MM-DD).`, { fields: [field] });
   }
 }

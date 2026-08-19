@@ -1,8 +1,8 @@
 import express from 'express';
 import { healthRouter } from './routes/health.js';
 import { authRouter } from './routes/auth.js';
-import { requireAuth, requireRole } from './middleware/auth.js';
-import { asyncHandler } from './lib/errors.js';
+import { adminRouter } from './routes/admin.js';
+import { doctorsRouter } from './routes/doctors.js';
 import {
   cors,
   requestId,
@@ -25,22 +25,9 @@ export function createApp() {
   // --- routes -------------------------------------------------------
   app.use('/api', healthRouter);
   app.use('/api/auth', authRouter);
-
-  // TEMPORARY (Day 2 verification only): proves requireAuth/requireRole
-  // work end-to-end before the real admin portal exists. Remove this once
-  // Day 3 adds actual admin routes under /api/admin.
-  app.get(
-    '/api/admin/ping',
-    requireAuth,
-    requireRole('admin'),
-    asyncHandler(async (req, res) => {
-      res.json({ ok: true, role: req.user.role });
-    })
-  );
-
-  // Day 3+: app.use('/api/admin', adminRouter);
-  //         app.use('/api/doctors', doctorRouter);
-  //         app.use('/api/appointments', appointmentRouter);
+  app.use('/api/admin', adminRouter);
+  app.use('/api/doctors', doctorsRouter);
+  // Day 4+: app.use('/api/appointments', appointmentRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

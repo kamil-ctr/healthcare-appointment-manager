@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { one } from '../db/pool.js';
-import { AppError, asyncHandler, unauthorized, notFound } from '../lib/errors.js';
+import { asyncHandler, unauthorized, notFound, emailTaken } from '../lib/errors.js';
 import { required, isEmail, minLength } from '../lib/validate.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
 import { signToken } from '../lib/jwt.js';
@@ -46,7 +46,7 @@ authRouter.post(
       );
     } catch (err) {
       if (err.code === '23505') {
-        throw new AppError(409, 'EMAIL_TAKEN', 'An account with this email already exists.');
+        throw emailTaken();
       }
       throw err;
     }
@@ -96,6 +96,10 @@ authRouter.get(
       [req.user.id]
     );
     if (!user) throw notFound('User not found.');
+    // The JWT payload only carries id/role from the moment it was issued -
+    // a deactivated account must lose access immediately, not just once its
+    // token happens to expire.
+    if (!user.isActive) throw unauthorized('Account is deactivated.');
     res.json({ user });
   })
 );

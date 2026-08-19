@@ -22,6 +22,8 @@ export const notFound = (message = 'Resource not found') =>
   new AppError(404, 'NOT_FOUND', message);
 export const conflict = (message, details) =>
   new AppError(409, 'CONFLICT', message, details);
+export const emailTaken = () =>
+  new AppError(409, 'EMAIL_TAKEN', 'An account with this email already exists.');
 export const unavailable = (message = 'Upstream service unavailable') =>
   new AppError(503, 'SERVICE_UNAVAILABLE', message);
 

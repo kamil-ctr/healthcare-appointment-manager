@@ -1,46 +1,25 @@
-import { useEffect, useState } from 'react';
-import { api } from './api.js';
+import { useAuth } from './AuthContext.jsx';
+import LoginPage from './LoginPage.jsx';
+import AdminApp from './AdminApp.jsx';
 
 /**
- * Day 1 shell: proves the browser -> API -> Postgres path is wired up.
- * Patient / doctor / admin portals land on top of this from day 2.
+ * Routes on auth state alone (no router dependency, per the three-package
+ * frontend budget). Patient / doctor portals land here from day 4+.
  */
 export default function App() {
-  const [apiCheck, setApiCheck] = useState({ state: 'loading' });
-  const [dbCheck, setDbCheck] = useState({ state: 'loading' });
+  const { auth, logout } = useAuth();
 
-  useEffect(() => {
-    api('/health')
-      .then((d) => setApiCheck({ state: 'ok', data: d }))
-      .catch((e) => setApiCheck({ state: 'error', message: e.message }));
-    api('/health/db')
-      .then((d) => setDbCheck({ state: 'ok', data: d }))
-      .catch((e) => setDbCheck({ state: 'error', message: e.message }));
-  }, []);
+  if (!auth) return <LoginPage />;
+  if (auth.user.role === 'admin') return <AdminApp />;
 
   return (
     <main className="shell">
       <h1>Healthcare Appointment &amp; Follow-up Manager</h1>
-      <p className="muted">Day 1 - infrastructure check</p>
-
-      <ul className="checks">
-        <li className={apiCheck.state}>
-          <strong>API</strong>
-          <span>
-            {apiCheck.state === 'loading' && 'checking...'}
-            {apiCheck.state === 'ok' && `reachable (up ${apiCheck.data.uptimeSeconds}s)`}
-            {apiCheck.state === 'error' && apiCheck.message}
-          </span>
-        </li>
-        <li className={dbCheck.state}>
-          <strong>Database</strong>
-          <span>
-            {dbCheck.state === 'loading' && 'checking...'}
-            {dbCheck.state === 'ok' && `connected (${dbCheck.data.latencyMs} ms)`}
-            {dbCheck.state === 'error' && dbCheck.message}
-          </span>
-        </li>
-      </ul>
+      <p className="muted">
+        Signed in as {auth.user.fullName} ({auth.user.role}).
+      </p>
+      <p className="muted">The {auth.user.role} portal is not built yet.</p>
+      <button onClick={logout}>Sign out</button>
     </main>
   );
 }

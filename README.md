@@ -5,8 +5,9 @@ Patients book slots and submit symptoms in advance; an LLM produces a pre-visit 
 urgency level for the doctor and a patient-friendly summary after the visit. Both sides are kept
 informed through email and Google Calendar.
 
-> **Status:** Day 2 of 10 — auth (register/login/me), scrypt password hashing, hand-rolled
-> HS256 JWT, role middleware, idempotent admin seed. See [Roadmap](#roadmap) for what lands next.
+> **Status:** Day 3 of 10 — admin portal: doctor CRUD, weekly availability with
+> never-partially-applied validation, and the timezone-correct leave cascade. See
+> [Roadmap](#roadmap) for what lands next.
 
 ---
 
@@ -59,7 +60,8 @@ healthcare-appointment-manager/
 ├── server/
 │   ├── package.json
 │   ├── scripts/
-│   │   └── concurrency-check.js   # proves the no-double-booking guarantee
+│   │   ├── concurrency-check.js   # proves the no-double-booking guarantee
+│   │   └── seed-admin.js          # idempotent admin seed
 │   └── src/
 │       ├── index.js          # entrypoint + graceful shutdown
 │       ├── app.js            # express wiring
@@ -67,14 +69,27 @@ healthcare-appointment-manager/
 │       ├── db/
 │       │   ├── pool.js       # pool, query helpers, withTransaction()
 │       │   └── migrate.js    # applies docs/schema.sql
-│       ├── lib/errors.js     # AppError + typed helpers
-│       ├── middleware/core.js
-│       └── routes/health.js
+│       ├── lib/
+│       │   ├── errors.js     # AppError + typed helpers
+│       │   ├── password.js   # scrypt hash/verify
+│       │   ├── jwt.js        # hand-rolled HS256 sign/verify
+│       │   └── validate.js   # required/isEmail/minLength/oneOf/isDateString
+│       ├── middleware/
+│       │   ├── core.js
+│       │   └── auth.js       # requireAuth, requireRole(...)
+│       ├── services/
+│       │   ├── doctors.js    # doctor CRUD, availability
+│       │   └── leave.js      # leave + appointment-cancellation cascade
+│       └── routes/
+│           ├── health.js
+│           ├── auth.js
+│           ├── admin.js      # admin-only: doctors, availability, leave
+│           └── doctors.js    # read-only, any authenticated role
 └── web/
     ├── package.json
     ├── vite.config.js
     ├── index.html
-    └── src/{main.jsx, App.jsx, api.js, styles.css}
+    └── src/{main.jsx, App.jsx, api.js, styles.css, AuthContext.jsx, LoginPage.jsx, AdminApp.jsx}
 ```
 
 ---
@@ -201,7 +216,7 @@ patient and doctor.
 |---|---|---|
 | 1 | Repo, schema, DB layer, health checks | ✅ done |
 | 2 | Auth: register/login, scrypt, JWT, role middleware, admin seed | ✅ done |
-| 3 | Admin portal: doctor CRUD, availability, leave days | |
+| 3 | Admin portal: doctor CRUD, availability, leave days | ✅ done |
 | 4 | Slot generation, hold/confirm flow, **concurrency test** | |
 | 5 | Symptom form, pre-visit LLM summary, doctor queue | |
 | 6 | Outbox worker, Nodemailer, booking/cancellation emails | |
