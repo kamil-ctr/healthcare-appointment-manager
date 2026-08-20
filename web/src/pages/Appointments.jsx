@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../AuthContext.jsx';
 import { useToast } from '../components/Toast.jsx';
 import SlotRail from '../components/SlotRail.jsx';
@@ -132,14 +132,14 @@ export default function Appointments() {
     return (
       <li key={a.id} className="rounded-[var(--radius-card)] border border-line bg-surface p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
+          <Link to={`/appointments/${a.id}`} className="hover:underline">
             <p className="font-medium">{a.doctorName}</p>
             <p className="text-sm text-ink/60">{a.doctorSpecialisation}</p>
             <p className="font-data text-sm">
               <time dateTime={a.startsAt}>{formatDateTime(a.startsAt)}</time>
             </p>
             <p className="text-xs text-ink/50">{STATUS_LABEL[a.status] || a.status}</p>
-          </div>
+          </Link>
           {ACTIVE_STATUSES.includes(a.status) && (
             <div className="flex gap-2">
               <button

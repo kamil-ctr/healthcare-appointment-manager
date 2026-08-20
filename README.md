@@ -5,11 +5,14 @@ Patients book slots and submit symptoms in advance; an LLM produces a pre-visit 
 urgency level for the doctor and a patient-friendly summary after the visit. Both sides are kept
 informed through email and Google Calendar.
 
-> **Status:** Day 7 of 10 — Google Calendar OAuth 2.0 (native fetch, no `googleapis`
-> package), AES-256-GCM token encryption at rest, transparent access-token refresh,
-> and the calendar-topic outbox handler (create/update/delete events, idempotent
-> 404/410 handling, revoked-grant detection) - entirely optional, nothing in the
-> booking request path ever calls Google. See [Roadmap](#roadmap) for what lands next.
+> **Status:** Day 7 of 10, plus a hardening pass — Google Calendar OAuth 2.0 (native fetch, no
+> `googleapis` package), AES-256-GCM token encryption at rest, transparent access-token
+> refresh, and the calendar-topic outbox handler (create/update/delete events, idempotent
+> 404/410 handling, revoked-grant detection) - entirely optional, nothing in the booking
+> request path ever calls Google. Hardening pass: a GiST exclusion constraint closing the
+> overlap hole `unique_active_appointment` couldn't catch, inline per-doctor stale-hold
+> expiry, an append-only `appointment_events` audit log with a timeline UI, and hand-rolled
+> RFC 5545 `.ics` calendar attachments. See [Roadmap](#roadmap) for what lands next.
 
 ---
 
@@ -89,7 +92,8 @@ healthcare-appointment-manager/
 │       │   └── calendar.js   # native-fetch Calendar REST client: create/patch/delete
 │       ├── mail/
 │       │   ├── transport.js  # one shared nodemailer transport, console fallback
-│       │   └── templates.js  # plain-literal email templates, doctor-timezone rendering
+│       │   ├── templates.js  # plain-literal email templates, doctor-timezone rendering
+│       │   └── ics.js        # hand-rolled RFC 5545 .ics generator, no dependency
 │       ├── middleware/
 │       │   ├── core.js
 │       │   └── auth.js       # requireAuth, requireRole(...)
@@ -100,7 +104,8 @@ healthcare-appointment-manager/
 │       │   ├── slots.js
 │       │   ├── symptoms.js   # symptom form submission, pre-visit summary get/retry
 │       │   ├── queue.js      # doctor's urgency-sorted daily queue
-│       │   └── notifications.js  # admin outbox listing + dead-letter retry
+│       │   ├── notifications.js  # admin outbox listing + dead-letter retry
+│       │   └── events.js     # appointment_events append helper (logEvent, actor)
 │       ├── jobs/
 │       │   ├── runner.js
 │       │   ├── expire-holds.js
@@ -158,7 +163,7 @@ npm install
 npm run migrate      # applies ../docs/schema.sql — safe to re-run
 ```
 
-Expected output: `[migrate] done. 13 tables present: ...`
+Expected output: `[migrate] done. 14 tables present: ...`
 
 Set `LLM_API_KEY` to a [Groq](https://console.groq.com) API key to enable the pre-visit
 summary (Day 5) - a blank key degrades gracefully (booking still works; the doctor sees the
@@ -248,11 +253,11 @@ PASS - no double booking possible.
 
 ## Database design
 
-Full DDL with commentary in [`docs/schema.sql`](docs/schema.sql). Thirteen tables:
+Full DDL with commentary in [`docs/schema.sql`](docs/schema.sql). Fourteen tables:
 
 `users` · `doctors` · `doctor_availability` · `doctor_leave` · `appointments` ·
-`symptom_forms` · `visit_notes` · `prescriptions` · `ai_summaries` · `reminders` ·
-`outbox` · `google_accounts` · `calendar_events`
+`appointment_events` · `symptom_forms` · `visit_notes` · `prescriptions` · `ai_summaries` ·
+`reminders` · `outbox` · `google_accounts` · `calendar_events`
 
 Three decisions carry most of the design:
 
@@ -267,6 +272,16 @@ CREATE UNIQUE INDEX unique_active_appointment
 Two simultaneous requests for the same slot produce one row and one `23505` unique violation,
 which the API maps to `409 CONFLICT`. Because cancelled and expired rows fall outside the partial
 index, a freed slot becomes bookable again immediately.
+
+That index only catches two appointments starting at the *identical* instant, not general
+overlap - a doctor's `slotMinutes` changing after a slot is booked can otherwise offer a new
+start time that lands inside an existing appointment's window. A GiST exclusion constraint,
+`appointments_no_overlap`, closes that hole as a second database invariant (`23P01`, also
+mapped to `409 SLOT_TAKEN`); the same pattern is applied to `doctor_availability` so
+overlapping weekly blocks are rejected at the database level too. An advisory lock per doctor
+was considered and rejected here: it would serialise every booking attempt for that doctor one
+at a time, while the exclusion constraint lets concurrent attempts run fully in parallel and
+rejects only the actual loser.
 
 **2. Every outbound side effect goes through a transactional `outbox`.**
 
@@ -298,6 +313,20 @@ Calendar is entirely optional: nothing in the booking/confirm/cancel/reschedule 
 ever calls Google - only the outbox worker does, on its own tick, and a user who never connects
 just gets `calendar`-topic rows that dead-letter immediately as `google_not_connected`.
 
+**4. Every appointment's history is auditable, and every confirmation/cancellation carries a
+calendar file that works without Google.**
+
+`appointment_events` is an append-only log (`held`, `symptoms_submitted`, `confirmed`,
+`cancelled_by_*`, `expired`, `rescheduled`, `summary_ready`/`summary_failed`, `email_sent`,
+`calendar_event_created`/`_deleted`) written in the same transaction as the change itself, never
+after - `GET /api/appointments/:id/events` renders it as a timeline on the appointment detail
+page, which is what makes the leave cascade and hold expiry independently verifiable instead of
+only asserted. Separately, `server/src/mail/ics.js` hand-rolls an RFC 5545 `.ics` file (no
+dependency) attached to booking-confirmation, cancellation, and leave-cancellation emails.
+Google Calendar sync requires the recipient to complete OAuth first, so an ICS attachment is the
+only notification path that reaches *every* recipient - including a grader who never connects an
+account - which is why it exists alongside, not instead of, the Day 7 integration.
+
 ---
 
 ## LLM: pre-visit triage summary
@@ -324,6 +353,7 @@ the doctor, never a crash or a blocked booking.
 | 5 | Symptom form, pre-visit LLM summary, doctor queue | ✅ done |
 | 6 | Outbox worker, Nodemailer, booking/cancellation emails | ✅ done |
 | 7 | Google Calendar OAuth, create/update/delete events | ✅ done |
+| 7+ | Hardening: overlap exclusion constraints, inline hold expiry, event log + timeline, ICS attachments | ✅ done |
 | 8 | Post-visit notes, prescriptions, medication reminders | |
 | 9 | Deployment + integration testing | |
 | 10 | Documentation, system-design write-up, final audit | |

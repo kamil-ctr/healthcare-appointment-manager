@@ -22,6 +22,9 @@ import { sendMail } from '../mail/transport.js';
 import { renderEmail } from '../mail/templates.js';
 import { getAccessToken } from '../google/tokens.js';
 import { createEvent, patchEvent, deleteEvent, buildEventBody, GoogleCalendarError } from '../google/calendar.js';
+import { logEvent, actor } from '../services/events.js';
+import { buildIcs } from '../mail/ics.js';
+import { config } from '../config.js';
 
 const BATCH_SIZE = 10;
 const STALE_MINUTES = 10;
@@ -90,7 +93,8 @@ async function claimBatch(limit) {
 // ---------------------------------------------------------------------
 async function fetchOutboxDetail(id) {
   return one(
-    `SELECT o.id, o.event_type AS "eventType", o.payload, o.attempts, o.max_attempts AS "maxAttempts",
+    `SELECT o.id, o.event_type AS "eventType", o.appointment_id AS "appointmentId",
+            o.payload, o.attempts, o.max_attempts AS "maxAttempts",
             ru.email AS "recipientEmail",
             COALESCE(da.timezone, dr.timezone, 'UTC') AS "doctorTimezone"
        FROM outbox o
@@ -103,6 +107,80 @@ async function fetchOutboxDetail(id) {
   );
 }
 
+const ICS_METHOD_BY_EVENT_TYPE = {
+  booking_confirmation: 'REQUEST',
+  booking_cancelled: 'CANCEL',
+  leave_cancellation: 'CANCEL',
+};
+
+function parseFromAddress(from) {
+  const match = /<([^>]+)>/.exec(from);
+  return match ? match[1] : from;
+}
+
+/**
+ * Walks the rescheduled_from chain backward from this appointment to its
+ * root, so the calendar UID (and SEQUENCE, counted across every row in
+ * that chain) stay stable and monotonically increasing across the
+ * appointment's whole life - a reschedule must update the same calendar
+ * entry, never create a second one. SEQUENCE is derived from the
+ * appointment_events count rather than a new column: every state change
+ * already writes one of those rows in the same transaction, so the count
+ * is already an accurate, free-riding "how many times has this changed".
+ */
+async function resolveIcsIdentity(appointmentId) {
+  const { rows } = await query(
+    `WITH RECURSIVE chain AS (
+       SELECT id, rescheduled_from FROM appointments WHERE id = $1
+       UNION ALL
+       SELECT a.id, a.rescheduled_from
+         FROM appointments a JOIN chain c ON a.id = c.rescheduled_from
+     )
+     SELECT id, rescheduled_from AS "rescheduledFrom" FROM chain`,
+    [appointmentId]
+  );
+  const root = rows.find((r) => r.rescheduledFrom === null) ?? rows[rows.length - 1];
+  const ids = rows.map((r) => r.id);
+  const { rows: countRows } = await query(
+    `SELECT count(*)::int AS n FROM appointment_events WHERE appointment_id = ANY($1::uuid[])`,
+    [ids]
+  );
+  return { uid: root.id, sequence: countRows[0].n };
+}
+
+/** Returns nodemailer attachments: [] for event types that don't get an invite. */
+async function buildIcsAttachment(row) {
+  const method = ICS_METHOD_BY_EVENT_TYPE[row.eventType];
+  if (!method || !row.appointmentId) return [];
+
+  const slot = row.eventType === 'leave_cancellation' ? row.payload.originalSlot : row.payload;
+  if (!slot?.startsAt || !slot?.endsAt) return [];
+
+  const { uid, sequence } = await resolveIcsIdentity(row.appointmentId);
+  const cancelling = method === 'CANCEL';
+  const ics = buildIcs({
+    uid,
+    sequence,
+    method,
+    startsAt: slot.startsAt,
+    endsAt: slot.endsAt,
+    summary: `Appointment: ${row.payload.patientName} with ${row.payload.doctorName}`,
+    description: cancelling ? `Cancelled${row.payload.reason ? `: ${row.payload.reason}` : '.'}` : undefined,
+    organizerEmail: parseFromAddress(config.mail.from),
+    organizerName: 'Clinic',
+    attendeeEmail: row.recipientEmail,
+    attendeeName: row.payload.recipientName || row.payload.patientName,
+  });
+
+  return [
+    {
+      filename: 'invite.ics',
+      content: ics,
+      contentType: `text/calendar; method=${method}; charset=utf-8`,
+    },
+  ];
+}
+
 async function processEmailOne(id) {
   const row = await fetchOutboxDetail(id);
 
@@ -111,8 +189,14 @@ async function processEmailOne(id) {
       throw new Error('Outbox row has no recipient email (recipient_id missing or user deleted).');
     }
     const { subject, text, html } = renderEmail(row.eventType, row.payload, row.doctorTimezone);
-    await sendMail({ to: row.recipientEmail, subject, text, html });
-    await query(`UPDATE outbox SET status = 'sent', sent_at = now() WHERE id = $1`, [id]);
+    const attachments = await buildIcsAttachment(row);
+    await sendMail({ to: row.recipientEmail, subject, text, html, attachments });
+    await withTransaction(async (client) => {
+      await client.query(`UPDATE outbox SET status = 'sent', sent_at = now() WHERE id = $1`, [id]);
+      if (row.appointmentId) {
+        await logEvent(client, row.appointmentId, 'email_sent', actor.system, row.eventType);
+      }
+    });
     return 'sent';
   } catch (err) {
     return recordRetryOrDeadLetter(id, row.attempts, row.maxAttempts, String(err.message || err).slice(0, 500));
@@ -192,6 +276,7 @@ async function processCalendarOne(id) {
       await withTransaction(async (client) => {
         await upsertCalendarEventRow(client, row.appointmentId, row.userId, event.id, 'primary');
         await client.query(`UPDATE outbox SET status = 'sent', sent_at = now() WHERE id = $1`, [id]);
+        await logEvent(client, row.appointmentId, 'calendar_event_created', actor.system, row.userId === row.patientId ? 'patient' : 'doctor');
       });
       return 'sent';
     }
@@ -225,6 +310,7 @@ async function processCalendarOne(id) {
           [googleEventId, row.userId]
         );
         await client.query(`UPDATE outbox SET status = 'sent', sent_at = now() WHERE id = $1`, [id]);
+        await logEvent(client, row.appointmentId, 'calendar_event_deleted', actor.system, row.userId === row.patientId ? 'patient' : 'doctor');
       });
       return 'sent';
     }

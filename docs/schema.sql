@@ -22,6 +22,23 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Required for the `doctor_id WITH =` / `weekday WITH =` equality terms
+-- inside the GiST EXCLUDE constraints below - GiST has no native support
+-- for plain equality on uuid/smallint, btree_gist supplies it. Available on
+-- Neon, Supabase, and Render.
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+
+-- Postgres ships range types for int/numeric/date/timestamp(tz) but not for
+-- plain `time` - needed below to express "no two availability blocks for
+-- the same doctor+weekday overlap" as a range exclusion. CREATE TYPE has no
+-- IF NOT EXISTS form, hence the guard.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'timerange') THEN
+    CREATE TYPE timerange AS RANGE (subtype = time);
+  END IF;
+END$$;
+
 -- ---------------------------------------------------------------------
 -- 1. Identity & roles
 -- ---------------------------------------------------------------------
@@ -83,6 +100,20 @@ CREATE TABLE IF NOT EXISTS doctor_availability (
 CREATE INDEX IF NOT EXISTS availability_doctor_weekday_idx
   ON doctor_availability (doctor_id, weekday);
 
+-- Same overlap made a database invariant, not just an application check.
+-- services/doctors.js's setDoctorAvailability() still validates and rejects
+-- overlapping blocks itself (so a bad request gets a 400 with
+-- details.blocks naming every offending block, not a raw 500) - this
+-- constraint is the backstop for any write path that doesn't go through
+-- that validator.
+ALTER TABLE doctor_availability DROP CONSTRAINT IF EXISTS availability_no_overlap;
+ALTER TABLE doctor_availability ADD CONSTRAINT availability_no_overlap
+  EXCLUDE USING gist (
+    doctor_id WITH =,
+    weekday WITH =,
+    timerange(start_time, end_time) WITH &&
+  );
+
 -- A full-day leave. One row per doctor per date.
 CREATE TABLE IF NOT EXISTS doctor_leave (
   id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -133,6 +164,27 @@ CREATE UNIQUE INDEX IF NOT EXISTS unique_active_appointment
   ON appointments (doctor_id, starts_at)
   WHERE status IN ('held', 'confirmed');
 
+-- unique_active_appointment only catches two appointments starting at the
+-- EXACT same instant. It does nothing about overlap: if a doctor's
+-- slot_minutes changes after a slot was booked (e.g. 30 -> 20), the new
+-- grid can offer a start time that lands inside an existing appointment's
+-- window without ever colliding on starts_at. This exclusion constraint
+-- makes "no two active appointments for one doctor overlap in time" a
+-- database invariant instead. Both indexes are kept deliberately: the
+-- unique index is what the concurrency-check script (and any future
+-- partial index scan) exercises for the identical-instant race, cheaper
+-- than the GiST index for that specific case; the exclusion constraint
+-- covers the general overlap case the unique index cannot. The two raise
+-- different SQLSTATEs on conflict - 23505 (unique_violation) vs 23P01
+-- (exclusion_violation) - services/appointments.js maps BOTH to 409
+-- SLOT_TAKEN.
+ALTER TABLE appointments DROP CONSTRAINT IF EXISTS appointments_no_overlap;
+ALTER TABLE appointments ADD CONSTRAINT appointments_no_overlap
+  EXCLUDE USING gist (
+    doctor_id WITH =,
+    tstzrange(starts_at, ends_at) WITH &&
+  ) WHERE (status IN ('held', 'confirmed'));
+
 -- A patient should not sit in two places at once either.
 CREATE UNIQUE INDEX IF NOT EXISTS unique_active_patient_slot
   ON appointments (patient_id, starts_at)
@@ -150,6 +202,22 @@ CREATE INDEX IF NOT EXISTS appointments_expiring_holds_idx
 DROP TRIGGER IF EXISTS appointments_set_updated_at ON appointments;
 CREATE TRIGGER appointments_set_updated_at BEFORE UPDATE ON appointments
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- Append-only audit trail: one row per state-changing thing that happens to
+-- an appointment, written in the SAME transaction as the change itself
+-- (services/events.js), never as a best-effort afterthought. Makes the
+-- leave cascade, hold expiry, and notification delivery independently
+-- verifiable instead of only asserted by the code that produced them.
+CREATE TABLE IF NOT EXISTS appointment_events (
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  appointment_id uuid NOT NULL REFERENCES appointments(id) ON DELETE CASCADE,
+  event          text NOT NULL,
+  actor          text NOT NULL,   -- 'patient:<id>' | 'doctor:<id>' | 'admin:<id>' | 'system'
+  detail         text NOT NULL DEFAULT '',
+  created_at     timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS appointment_events_appointment_idx
+  ON appointment_events (appointment_id, created_at);
 
 -- ---------------------------------------------------------------------
 -- 4. Clinical content

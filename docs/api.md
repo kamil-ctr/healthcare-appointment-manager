@@ -170,7 +170,9 @@ every offending block by its position in the request array. Triggered by: malfor
 weekday/time, `endTime <= startTime`, a duration that isn't a whole multiple of the
 doctor's `slotMinutes`, or two blocks overlapping on the same weekday. **The whole payload
 is rejected together** - a rejected request never changes any stored availability.
-`404 NOT_FOUND`.
+`404 NOT_FOUND`. Overlap is also a database invariant (`availability_no_overlap`, a GiST
+exclusion constraint) as a backstop for any write path that bypasses this validator - see
+`docs/schema.sql`.
 
 ### `POST /api/admin/doctors/:id/leave`
 Records a full-day leave and, in the same transaction, cancels every `held`/`confirmed`
@@ -275,9 +277,12 @@ Response `201`: `{ "appointmentId", "startsAt", "endsAt", "holdExpiresAt", "hold
 Errors: `400 BAD_REQUEST` (doctor missing/inactive, `startsAt` invalid/in the
 past/beyond the 30-day horizon/off the availability grid/on a leave day),
 `409 SLOT_TAKEN` (another appointment already holds/confirms that doctor+time - resolved by
-`unique_active_appointment`, never a pre-check `SELECT`), `409 PATIENT_BUSY` (the same
-patient already holds/confirms a **different** doctor at that exact instant - resolved by
-`unique_active_patient_slot`).
+`unique_active_appointment` (exact same instant, SQLSTATE `23505`) **or**
+`appointments_no_overlap` (any time overlap, SQLSTATE `23P01` - e.g. after a doctor's
+`slotMinutes` changes and the new grid offers a start time inside an existing booking's
+window) - never a pre-check `SELECT`, both map to the same `409 SLOT_TAKEN`),
+`409 PATIENT_BUSY` (the same patient already holds/confirms a **different** doctor at that
+exact instant - resolved by `unique_active_patient_slot`).
 
 ### `POST /api/appointments/:id/confirm`
 `patient`, owner only.
@@ -368,6 +373,21 @@ Response `202`: `{ "status": "pending" }`
 
 Errors: `404 NOT_FOUND` (no such appointment, or no symptom form submitted yet),
 `403 FORBIDDEN` (doctor not assigned to this appointment).
+
+### `GET /api/appointments/:id/events`
+The appointment's own patient or doctor, or an admin - same access rule as
+`GET /api/appointments/:id/pre-visit-summary`.
+
+Response `200`: `{ "events": [ { "event", "actor", "detail", "createdAt" } ] }`, oldest
+first. `event` is one of `held`, `symptoms_submitted`, `confirmed`, `cancelled_by_patient`,
+`cancelled_by_doctor`, `cancelled_by_leave`, `expired`, `rescheduled`, `summary_ready`,
+`summary_failed`, `email_sent`, `calendar_event_created`, `calendar_event_deleted`.
+`actor` is `"patient:<id>"` / `"doctor:<id>"` / `"admin:<id>"` / `"system"`. Every row is
+written in the same transaction as the change it records - inserted by
+`services/events.js`'s `logEvent()`, never as a best-effort afterthought - so this is a
+faithful audit trail, not a log that can silently miss something.
+
+Errors: `404 NOT_FOUND`, `403 FORBIDDEN` (not a participant and not an admin).
 
 ---
 

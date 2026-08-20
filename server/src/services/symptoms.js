@@ -7,6 +7,7 @@
  */
 import { one, query, withTransaction } from '../db/pool.js';
 import { badRequest, notFound, forbidden, conflict } from '../lib/errors.js';
+import { logEvent, actor } from './events.js';
 
 export async function submitSymptomForm(appointmentId, patientId, body) {
   const symptoms = typeof body.symptoms === 'string' ? body.symptoms.trim() : '';
@@ -57,6 +58,7 @@ export async function submitSymptomForm(appointmentId, patientId, body) {
          RETURNING id`,
         [appointmentId]
       );
+      await logEvent(client, appointmentId, 'symptoms_submitted', actor.patient(patientId));
       return { symptomFormId: formRows[0].id, aiSummaryId: summaryRows[0].id, status: 'pending' };
     });
   } catch (err) {

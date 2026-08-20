@@ -6,6 +6,7 @@ import Doctors from './pages/Doctors.jsx';
 import DoctorProfile from './pages/DoctorProfile.jsx';
 import Book from './pages/Book.jsx';
 import Appointments from './pages/Appointments.jsx';
+import AppointmentDetail from './pages/AppointmentDetail.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import AdminDoctors from './pages/admin/AdminDoctors.jsx';
@@ -51,6 +52,14 @@ export default function App() {
           element={
             <RequireAuth roles={['patient', 'doctor']}>
               <Appointments />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/appointments/:id"
+          element={
+            <RequireAuth roles={['patient', 'doctor']}>
+              <AppointmentDetail />
             </RequireAuth>
           }
         />

@@ -14,6 +14,7 @@
  */
 import { withTransaction } from '../db/pool.js';
 import { generatePreVisitSummary } from '../llm/pre-visit.js';
+import { logEvent, actor } from '../services/events.js';
 
 const BATCH_SIZE = 5;
 const MAX_ATTEMPTS = 3;
@@ -21,7 +22,7 @@ const MAX_ATTEMPTS = 3;
 async function claimAndProcessOne(excludeIds) {
   return withTransaction(async (client) => {
     const { rows } = await client.query(
-      `SELECT s.id, f.symptoms, f.duration, f.severity,
+      `SELECT s.id, s.appointment_id AS "appointmentId", f.symptoms, f.duration, f.severity,
               f.existing_conditions AS "existingConditions",
               f.current_medications AS "currentMedications", f.allergies
          FROM ai_summaries s
@@ -45,6 +46,7 @@ async function claimAndProcessOne(excludeIds) {
           WHERE id = $1`,
         [row.id, content.urgency, JSON.stringify(content), raw, model, promptVersion]
       );
+      await logEvent(client, row.appointmentId, 'summary_ready', actor.system, `urgency=${content.urgency}`);
       return { id: row.id, outcome: 'ready' };
     } catch (err) {
       // Any failure - timeout, non-200, malformed JSON that survived the
@@ -56,6 +58,7 @@ async function claimAndProcessOne(excludeIds) {
           WHERE id = $1`,
         [row.id, String(err.message || err).slice(0, 500)]
       );
+      await logEvent(client, row.appointmentId, 'summary_failed', actor.system, String(err.message || err).slice(0, 200));
       return { id: row.id, outcome: 'failed' };
     }
   });

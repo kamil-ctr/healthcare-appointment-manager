@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../AuthContext.jsx';
-import PreVisitSummaryCard from '../components/PreVisitSummaryCard.jsx';
 import AppointmentTimeline from '../components/AppointmentTimeline.jsx';
 
 function formatDateTime(iso) {
@@ -14,7 +13,8 @@ function formatDateTime(iso) {
   });
 }
 
-export default function DoctorAppointmentDetail() {
+/** Patient-side counterpart of DoctorAppointmentDetail.jsx - same timeline, patient's own view. */
+export default function AppointmentDetail() {
   const { id } = useParams();
   const { call } = useAuth();
   const [appointment, setAppointment] = useState(null);
@@ -27,15 +27,17 @@ export default function DoctorAppointmentDetail() {
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
-      <h1 className="mb-1 text-2xl">{appointment ? appointment.patientName : 'Appointment'}</h1>
+      <h1 className="mb-1 text-2xl">{appointment ? appointment.doctorName : 'Appointment'}</h1>
       {appointment && (
-        <p className="mb-6 font-data text-sm text-ink/60">
-          <time dateTime={appointment.startsAt}>{formatDateTime(appointment.startsAt)}</time>
-        </p>
+        <>
+          <p className="text-sm text-ink/60">{appointment.doctorSpecialisation}</p>
+          <p className="mb-6 font-data text-sm text-ink/60">
+            <time dateTime={appointment.startsAt}>{formatDateTime(appointment.startsAt)}</time>
+          </p>
+        </>
       )}
-      <PreVisitSummaryCard appointmentId={id} canRetry />
 
-      <section className="mt-8">
+      <section>
         <h2 className="mb-3 text-sm font-medium text-ink/70">Timeline</h2>
         <AppointmentTimeline appointmentId={id} />
       </section>

@@ -8,6 +8,7 @@ import {
   cancelAppointment,
   rescheduleAppointment,
   listAppointments,
+  getAppointmentEvents,
 } from '../services/appointments.js';
 import {
   submitSymptomForm,
@@ -84,6 +85,14 @@ appointmentsRouter.get(
   asyncHandler(async (req, res) => {
     const result = await getPreVisitSummary(req.params.id, req.user);
     res.json(result);
+  })
+);
+
+appointmentsRouter.get(
+  '/:id/events',
+  asyncHandler(async (req, res) => {
+    const events = await getAppointmentEvents(req.params.id, req.user);
+    res.json({ events });
   })
 );
 

@@ -6,6 +6,7 @@
  */
 import { one, withTransaction } from '../db/pool.js';
 import { conflict, notFound } from '../lib/errors.js';
+import { logEvent, actor } from './events.js';
 
 /**
  * date must be 'YYYY-MM-DD'. Matched against the doctor's OWN timezone,
@@ -57,6 +58,11 @@ export async function createLeaveWithCascade(doctorId, { date, reason, createdBy
         WHERE id = ANY($1::uuid[])`,
       [appointmentIds, reason ?? 'Doctor on leave']
     );
+
+    const leaveActor = createdBy ? actor.admin(createdBy) : actor.system;
+    for (const id of appointmentIds) {
+      await logEvent(client, id, 'cancelled_by_leave', leaveActor, reason ?? 'Doctor on leave');
+    }
 
     // A cancelled appointment must never send a reminder.
     await client.query(

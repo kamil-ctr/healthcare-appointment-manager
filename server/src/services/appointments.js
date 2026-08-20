@@ -6,6 +6,7 @@
 import { one, many, withTransaction } from '../db/pool.js';
 import { AppError, badRequest, notFound, forbidden, conflict, symptomsRequired } from '../lib/errors.js';
 import { config } from '../config.js';
+import { logEvent, actor } from './events.js';
 
 const MAX_HORIZON_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -83,12 +84,45 @@ async function validateSlotRequest(doctorId, startsAt) {
   return doctor;
 }
 
+/**
+ * The periodic sweep (jobs/expire-holds.js) only runs once a tick, so a
+ * dead hold can look taken for up to a minute after it actually expired.
+ * Called first thing inside the hold/reschedule transaction, scoped to
+ * this ONE doctor - never table-wide - so a booking for a different doctor
+ * is never touched by a caller who only cares about one doctor's grid. The
+ * periodic sweep stays in place as global hygiene for doctors nobody is
+ * actively booking right now.
+ */
+async function expireDoctorStaleHolds(client, doctorId) {
+  const { rows } = await client.query(
+    `UPDATE appointments SET status = 'expired'
+      WHERE doctor_id = $1 AND status = 'held' AND hold_expires_at < now()
+      RETURNING id`,
+    [doctorId]
+  );
+  for (const row of rows) {
+    await logEvent(client, row.id, 'expired', actor.system, 'inline expiry during a hold/reschedule for this doctor');
+  }
+}
+
+/** Maps both overlap-related SQLSTATEs to the same 409 the client already handles. */
+function mapSlotConflict(err) {
+  if (err.code === '23505') {
+    if (err.constraint === 'unique_active_appointment') return slotTaken();
+    if (err.constraint === 'unique_active_patient_slot') return patientBusy();
+  }
+  if (err.code === '23P01' && err.constraint === 'appointments_no_overlap') return slotTaken();
+  return null;
+}
+
 export async function holdAppointment(doctorId, patientId, startsAt) {
   const doctor = await validateSlotRequest(doctorId, startsAt);
   const endsAt = new Date(new Date(startsAt).getTime() + doctor.slotMinutes * 60000).toISOString();
 
   try {
     return await withTransaction(async (client) => {
+      await expireDoctorStaleHolds(client, doctorId);
+
       const { rows } = await client.query(
         `INSERT INTO appointments (doctor_id, patient_id, starts_at, ends_at, status, hold_expires_at)
          VALUES ($1, $2, $3, $4, 'held', now() + ($5 || ' minutes')::interval)
@@ -96,14 +130,12 @@ export async function holdAppointment(doctorId, patientId, startsAt) {
                    hold_expires_at AS "holdExpiresAt"`,
         [doctorId, patientId, startsAt, endsAt, config.booking.holdMinutes]
       );
-      return { ...rows[0], holdSeconds: config.booking.holdMinutes * 60 };
+      const held = rows[0];
+      await logEvent(client, held.appointmentId, 'held', actor.patient(patientId));
+      return { ...held, holdSeconds: config.booking.holdMinutes * 60 };
     });
   } catch (err) {
-    if (err.code === '23505') {
-      if (err.constraint === 'unique_active_appointment') throw slotTaken();
-      if (err.constraint === 'unique_active_patient_slot') throw patientBusy();
-    }
-    throw err;
+    throw mapSlotConflict(err) ?? err;
   }
 }
 
@@ -177,6 +209,7 @@ export async function confirmAppointment(appointmentId, patientId) {
       `UPDATE appointments SET status = 'confirmed', hold_expires_at = NULL WHERE id = $1`,
       [appointmentId]
     );
+    await logEvent(client, appointmentId, 'confirmed', actor.patient(patientId));
 
     const p = await fetchParticipants(client, appointmentId);
     const slot = { startsAt: p.startsAt, endsAt: p.endsAt };
@@ -235,6 +268,13 @@ export async function cancelAppointment(appointmentId, userId, role, reason) {
       newStatus,
       reason ?? null,
     ]);
+    await logEvent(
+      client,
+      appointmentId,
+      newStatus,
+      isPatient ? actor.patient(userId) : actor.doctor(userId),
+      reason ?? ''
+    );
 
     await cancelScheduledReminders(client, appointmentId);
 
@@ -319,6 +359,8 @@ export async function rescheduleAppointment(appointmentId, patientId, newStartsA
         [appointmentId]
       );
 
+      await expireDoctorStaleHolds(client, old.doctor_id);
+
       await cancelScheduledReminders(client, appointmentId);
 
       const { rows: events } = await client.query(
@@ -336,6 +378,20 @@ export async function rescheduleAppointment(appointmentId, patientId, newStartsA
         [old.doctor_id, patientId, newStartsAt, newEndsAt, config.booking.holdMinutes, appointmentId]
       );
       const newAppt = inserted[0];
+      await logEvent(
+        client,
+        appointmentId,
+        'rescheduled',
+        actor.patient(patientId),
+        `to ${newAppt.appointmentId} at ${newAppt.startsAt}`
+      );
+      await logEvent(
+        client,
+        newAppt.appointmentId,
+        'held',
+        actor.patient(patientId),
+        `rescheduled from ${appointmentId}`
+      );
 
       // The symptom form (and whatever the model already made of it) belongs
       // to the visit, not the slot - carry both onto the new held row so a
@@ -399,12 +455,30 @@ export async function rescheduleAppointment(appointmentId, patientId, newStartsA
       return { ...newAppt, holdSeconds: config.booking.holdMinutes * 60, rescheduledFrom: appointmentId };
     });
   } catch (err) {
-    if (err.code === '23505') {
-      if (err.constraint === 'unique_active_appointment') throw slotTaken();
-      if (err.constraint === 'unique_active_patient_slot') throw patientBusy();
-    }
-    throw err;
+    throw mapSlotConflict(err) ?? err;
   }
+}
+
+/** Participants (their own appointment) and admins only - same rule as the pre-visit summary. */
+export async function getAppointmentEvents(appointmentId, user) {
+  const appt = await one(
+    `SELECT id, doctor_id AS "doctorId", patient_id AS "patientId" FROM appointments WHERE id = $1`,
+    [appointmentId]
+  );
+  if (!appt) throw notFound('Appointment not found.');
+
+  const isParticipant =
+    (user.role === 'patient' && appt.patientId === user.id) ||
+    (user.role === 'doctor' && appt.doctorId === user.id);
+  if (!isParticipant && user.role !== 'admin') {
+    throw forbidden('You do not have access to this appointment.');
+  }
+
+  return many(
+    `SELECT event, actor, detail, created_at AS "createdAt"
+       FROM appointment_events WHERE appointment_id = $1 ORDER BY created_at`,
+    [appointmentId]
+  );
 }
 
 export async function listAppointments({ user, status, from, to }) {

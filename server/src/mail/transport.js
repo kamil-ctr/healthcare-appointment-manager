@@ -55,12 +55,13 @@ export function resetTransport() {
   transport = undefined;
 }
 
-export async function sendMail({ to, subject, text, html }) {
+export async function sendMail({ to, subject, text, html, attachments }) {
   return getTransport().sendMail({
     from: config.mail.from,
     to,
     subject,
     text,
     html,
+    ...(attachments && attachments.length > 0 ? { attachments } : {}),
   });
 }
