@@ -5,13 +5,16 @@ Patients book slots and submit symptoms in advance; an LLM produces a pre-visit 
 urgency level for the doctor and a patient-friendly summary after the visit. Both sides are kept
 informed through email and Google Calendar.
 
-> **Status:** Day 7 of 10, plus a hardening pass — Google Calendar OAuth 2.0 (native fetch, no
-> `googleapis` package), AES-256-GCM token encryption at rest, transparent access-token
-> refresh, and the calendar-topic outbox handler (create/update/delete events, idempotent
-> 404/410 handling, revoked-grant detection) - entirely optional, nothing in the booking
-> request path ever calls Google. Hardening pass: a GiST exclusion constraint closing the
-> overlap hole `unique_active_appointment` couldn't catch, inline per-doctor stale-hold
-> expiry, an append-only `appointment_events` audit log with a timeline UI, and hand-rolled
+> **Status:** Day 8 of 10 — post-visit notes, prescriptions, a patient-friendly post-visit
+> summary (LLM, with a hallucination gate on the medication schedule), and medication/follow-up
+> reminders close the last functional requirement in the brief. Day 7 (previous): Google
+> Calendar OAuth 2.0 (native fetch, no `googleapis` package), AES-256-GCM token encryption at
+> rest, transparent access-token refresh, and the calendar-topic outbox handler (create/update/
+> delete events, idempotent 404/410 handling, revoked-grant detection) - entirely optional,
+> nothing in the booking request path ever calls Google. Day 7 hardening pass: a GiST exclusion
+> constraint closing the overlap hole `unique_active_appointment` couldn't catch, inline
+> per-doctor stale-hold expiry, an append-only `appointment_events` audit log with a timeline
+> UI, and hand-rolled
 > RFC 5545 `.ics` calendar attachments. See [Roadmap](#roadmap) for what lands next.
 
 ---
@@ -83,8 +86,9 @@ healthcare-appointment-manager/
 │       ├── llm/
 │       │   ├── client.js     # native-fetch Groq client, typed LlmError, timeout+retry
 │       │   ├── prompts.js    # versioned prompts, injection-guard sanitisation
-│       │   ├── parse.js      # strict output validation
-│       │   └── pre-visit.js  # orchestrates call -> validate -> one repair -> give up
+│       │   ├── parse.js      # strict output validation + post-visit hallucination gate
+│       │   ├── pre-visit.js  # orchestrates call -> validate -> one repair -> give up
+│       │   └── post-visit.js # same shape, post-visit patient-friendly summary
 │       ├── google/
 │       │   ├── crypto.js     # AES-256-GCM token encryption at rest (key from JWT_SECRET)
 │       │   ├── oauth.js      # connect/callback/disconnect/status, signed state param
@@ -103,6 +107,8 @@ healthcare-appointment-manager/
 │       │   ├── appointments.js  # hold/confirm/cancel/reschedule + reminder scheduling
 │       │   ├── slots.js
 │       │   ├── symptoms.js   # symptom form submission, pre-visit summary get/retry
+│       │   ├── notes.js      # visit notes/prescriptions submit+amend, post-visit summary get/retry
+│       │   ├── reminders.js  # medication/follow-up reminder expansion (FREQUENCY_TIMES)
 │       │   ├── queue.js      # doctor's urgency-sorted daily queue
 │       │   ├── notifications.js  # admin outbox listing + dead-letter retry
 │       │   └── events.js     # appointment_events append helper (logEvent, actor)
@@ -329,16 +335,45 @@ account - which is why it exists alongside, not instead of, the Day 7 integratio
 
 ---
 
-## LLM: pre-visit triage summary
+## LLM: pre-visit triage and post-visit summaries
 
-Full prompts, JSON schema, validation rules, retry/give-up policy, and the prompt-injection
-guard (with a verified real test case) are documented in
+Full prompts, JSON schemas, validation rules, retry/give-up policy, and the prompt-injection
+guard (with verified real test cases) are documented in
 [`docs/llm-prompts.md`](docs/llm-prompts.md). The short version: the model is never called
 inside a request handler (`POST /api/appointments/:id/symptoms` only inserts a `pending`
-`ai_summaries` row), confirming an appointment never depends on the summary being ready, and
-every failure mode - timeout, missing/invalid key, rate limit, malformed output surviving one
-repair attempt - degrades to a `failed` row with the raw symptom form still fully visible to
-the doctor, never a crash or a blocked booking.
+`ai_summaries` row, same for `POST/PATCH /api/appointments/:id/notes`), confirming an
+appointment never depends on the pre-visit summary being ready, and every failure mode -
+timeout, missing/invalid key, rate limit, malformed output surviving one repair attempt -
+degrades to a `failed` row with the raw symptom form (or, post-visit, the raw clinical notes
+and real prescription list) still fully visible, never a crash or a blocked write.
+
+The post-visit summary (Day 8) adds a hard **hallucination gate**
+(`server/src/llm/parse.js`): every medication in the model's `medicationSchedule` must
+correspond exactly to a real `prescriptions` row for that appointment, case-insensitively - an
+invented drug or a silently-dropped one fails validation just like malformed JSON, triggers the
+same one-repair-then-give-up policy, and ends the row `'failed'` rather than shipping a
+patient-facing summary that could be wrong about their own medication. Verified test case (fetch
+mocked to force the failure deterministically) in `docs/llm-prompts.md`.
+
+**Medication reminder scheduling** (`server/src/services/reminders.js`) expands each
+prescription into individual `reminders` rows, starting the day after the visit and running for
+`durationDays`, at times of day (in the **doctor's** timezone) fixed by `frequencyPerDay`:
+
+| Times/day | Schedule (local time) |
+|---|---|
+| 1 | 09:00 |
+| 2 | 09:00, 21:00 |
+| 3 | 08:00, 14:00, 20:00 |
+| 4 | 08:00, 12:00, 16:00, 20:00 |
+| 5 | 08:00, 11:30, 15:00, 18:30, 22:00 |
+| 6 | 08:00, 10:48, 13:36, 16:24, 19:12, 22:00 |
+
+(5 and 6 are evenly spaced across the 08:00-22:00 window.) Rows already in the past are skipped
+(relevant when notes are entered late in the day), and the total is capped at 400 per appointment
+- a prescription that would exceed the cap is clamped, with the clamp recorded in the API
+response rather than silently dropped. Amending notes (`PATCH .../notes`) cancels every
+still-`'scheduled'` reminder before rescheduling against the new prescriptions, so a superseded
+dose can never fire.
 
 ---
 
@@ -354,7 +389,7 @@ the doctor, never a crash or a blocked booking.
 | 6 | Outbox worker, Nodemailer, booking/cancellation emails | ✅ done |
 | 7 | Google Calendar OAuth, create/update/delete events | ✅ done |
 | 7+ | Hardening: overlap exclusion constraints, inline hold expiry, event log + timeline, ICS attachments | ✅ done |
-| 8 | Post-visit notes, prescriptions, medication reminders | |
+| 8 | Post-visit notes, prescriptions, post-visit LLM summary, medication reminders | ✅ done |
 | 9 | Deployment + integration testing | |
 | 10 | Documentation, system-design write-up, final audit | |
 

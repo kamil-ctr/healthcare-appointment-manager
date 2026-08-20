@@ -15,6 +15,12 @@ import {
   getPreVisitSummary,
   retryPreVisitSummary,
 } from '../services/symptoms.js';
+import {
+  submitVisitNotes,
+  amendVisitNotes,
+  getPostVisitSummary,
+  retryPostVisitSummary,
+} from '../services/notes.js';
 
 export const appointmentsRouter = Router();
 
@@ -101,6 +107,41 @@ appointmentsRouter.post(
   requireRole('doctor', 'admin'),
   asyncHandler(async (req, res) => {
     const result = await retryPreVisitSummary(req.params.id, req.user);
+    res.status(202).json(result);
+  })
+);
+
+appointmentsRouter.post(
+  '/:id/notes',
+  requireRole('doctor'),
+  asyncHandler(async (req, res) => {
+    const result = await submitVisitNotes(req.params.id, req.user.id, req.body ?? {});
+    res.status(201).json(result);
+  })
+);
+
+appointmentsRouter.patch(
+  '/:id/notes',
+  requireRole('doctor'),
+  asyncHandler(async (req, res) => {
+    const result = await amendVisitNotes(req.params.id, req.user.id, req.body ?? {});
+    res.json(result);
+  })
+);
+
+appointmentsRouter.get(
+  '/:id/post-visit-summary',
+  asyncHandler(async (req, res) => {
+    const result = await getPostVisitSummary(req.params.id, req.user);
+    res.json(result);
+  })
+);
+
+appointmentsRouter.post(
+  '/:id/post-visit-summary/retry',
+  requireRole('doctor', 'admin'),
+  asyncHandler(async (req, res) => {
+    const result = await retryPostVisitSummary(req.params.id, req.user);
     res.status(202).json(result);
   })
 );

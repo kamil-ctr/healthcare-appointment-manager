@@ -154,12 +154,49 @@ See you then.
   return { subject, text, html };
 }
 
+export function medicationReminder(payload) {
+  const subject = `Medication reminder: ${payload.medicationName} (dose ${payload.doseIndex} of ${payload.doseCount} today)`;
+  const instructions = payload.instructions?.trim() || 'As directed.';
+  const text = `Hi ${payload.patientName},
+
+Time for your medication.
+
+  Medication:   ${payload.medicationName} (${payload.dosage})
+  This is dose ${payload.doseIndex} of ${payload.doseCount} today.
+  Instructions: ${instructions}
+
+- Clinic`;
+  const html = wrapHtml('Medication reminder', `
+    <p>Hi ${esc(payload.patientName)},</p>
+    <p>Time for your medication.</p>
+    <p><strong>Medication:</strong> ${esc(payload.medicationName)} (${esc(payload.dosage)})<br>
+       <strong>This is dose ${esc(payload.doseIndex)} of ${esc(payload.doseCount)} today.</strong><br>
+       <strong>Instructions:</strong> ${esc(instructions)}</p>`);
+  return { subject, text, html };
+}
+
+export function followUpReminder(payload) {
+  const subject = `Follow-up reminder: ${payload.followUpDate}`;
+  const text = `Hi ${payload.patientName},
+
+This is a reminder that you have a follow-up on ${payload.followUpDate} with ${payload.doctorName}.
+
+- Clinic`;
+  const html = wrapHtml('Follow-up reminder', `
+    <p>Hi ${esc(payload.patientName)},</p>
+    <p>This is a reminder that you have a follow-up on <strong>${esc(payload.followUpDate)}</strong>
+       with ${esc(payload.doctorName)}.</p>`);
+  return { subject, text, html };
+}
+
 const TEMPLATES = {
   booking_confirmation: bookingConfirmation,
   booking_cancelled: bookingCancelled,
   leave_cancellation: leaveCancellation,
   leave_cancellation_summary: leaveCancellationSummary,
   appointment_reminder: appointmentReminder,
+  medication_reminder: medicationReminder,
+  follow_up_reminder: followUpReminder,
 };
 
 /** Throws on an unrecognised event_type - the caller treats that like any other send failure. */

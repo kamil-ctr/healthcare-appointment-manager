@@ -20,6 +20,7 @@ All responses are JSON. Errors share one shape:
 | 409 | `PATIENT_BUSY` | Patient already holds/confirms a different doctor at that instant |
 | 409 | `HOLD_EXPIRED` | The hold window passed before confirm |
 | 409 | `SYMPTOMS_REQUIRED` | Appointment cannot be confirmed without a submitted symptom form |
+| 409 | `NOTES_EXIST` | Visit notes already submitted for this appointment - use PATCH to amend |
 | 503 | `SERVICE_UNAVAILABLE` | Database/upstream provider unreachable, or a required secret unset |
 
 Authenticated routes expect `Authorization: Bearer <jwt>`.
@@ -374,6 +375,75 @@ Response `202`: `{ "status": "pending" }`
 Errors: `404 NOT_FOUND` (no such appointment, or no symptom form submitted yet),
 `403 FORBIDDEN` (doctor not assigned to this appointment).
 
+### `POST /api/appointments/:id/notes`
+`doctor` only, the appointment's own doctor. One transaction: the appointment must be
+`confirmed` **and** `startsAt` in the past (you cannot write notes for a visit that hasn't
+happened), inserts `visit_notes` + one row per prescription, moves the appointment to
+`completed`, inserts a `pending` `ai_summaries` row (`kind: 'post_visit'`) - the LLM is never
+called inline, the doctor is between patients - and expands medication/follow-up reminders
+(see `services/reminders.js`, "Medication reminders" below). Logs `notes_submitted` and
+`completed` appointment events.
+
+Request: `{ "clinicalNotes": "...", "diagnosis": "...", "followUpDate": "2026-09-01",
+"prescriptions": [ { "medicationName": "Amoxicillin", "dosage": "500mg",
+"frequencyPerDay": 3, "durationDays": 5, "instructions": "Take after meals" } ] }` -
+`followUpDate` and each prescription's `instructions` are optional; at least one of
+`clinicalNotes`/`diagnosis` is required; `frequencyPerDay` 1-6; `durationDays` 1-180;
+`medicationName`/`dosage` non-empty. The whole payload is rejected together with
+`details.fields` naming every offending field (e.g. `"prescriptions[0].frequencyPerDay"`) -
+never partially applied.
+
+Response `201`: `{ "appointmentId", "status": "completed", "visitNotes", "prescriptions",
+"postVisitSummaryStatus": "pending",
+"reminders": { "medication": { "totalScheduled", "cap": 400, "clampedPrescriptions": [] },
+"followUp": { "scheduled": boolean, "dueAt"? } } }`
+
+Errors: `400 BAD_REQUEST` (`details.fields`), `404 NOT_FOUND`, `403 FORBIDDEN` (not your
+appointment), `409 CONFLICT` (appointment not `confirmed`, or `startsAt` still in the future),
+`409 NOTES_EXIST` (notes already submitted - use PATCH).
+
+### `PATCH /api/appointments/:id/notes`
+`doctor` only, the appointment's own doctor, notes must already exist (`404` otherwise -
+POST creates them). Same validation and transaction shape as POST, plus: cancels every
+still-`'scheduled'` medication/follow-up reminder for this appointment
+(`medication_reminders_cancelled` event, only if any existed), replaces the prescription
+rows, resets the `post_visit` `ai_summaries` row to `pending` (clearing any prior
+content/error), and reschedules reminders against the amended prescriptions/follow-up date.
+Logs `notes_amended`.
+
+Response `200`: same shape as POST's `201`, minus `status`.
+
+Errors: same as POST, except `404 NOT_FOUND` also covers "no notes exist yet for this
+appointment."
+
+### `GET /api/appointments/:id/post-visit-summary`
+The appointment's own patient, the owning doctor, or an admin.
+
+Response `200`: `{ "status": "pending"|"ready"|"failed", "content", "generatedAt",
+"prescriptions": [ { "id", "medicationName", "dosage", "frequencyPerDay", "durationDays",
+"instructions" } ] }`. `prescriptions` is **always** present - it is the source of truth
+patients see alongside (not instead of) the AI rendering, not only a pending/failed
+fallback. `visitNotes: { "clinicalNotes", "diagnosis", "followUpDate" }` is included
+whenever `status` is not `'ready'`, **or** the caller is the doctor/admin (regardless of
+status) - so the same endpoint can prefill the doctor's amend form at any time, while a
+patient only sees the raw notes as a fallback when there is nothing AI-generated to show yet.
+`content` (when `status: 'ready'`) matches the schema in `docs/llm-prompts.md`:
+`{ "summary", "medicationSchedule": [ { "medication", "dose", "when", "duration" } ],
+"followUpSteps", "whenToSeekHelp" }` - every `medicationSchedule` entry is guaranteed (by the
+hallucination check, see `docs/llm-prompts.md`) to correspond exactly to a real prescription.
+
+Errors: `404 NOT_FOUND` (no such appointment, or no visit notes submitted yet),
+`403 FORBIDDEN` (not your appointment).
+
+### `POST /api/appointments/:id/post-visit-summary/retry`
+`doctor` (must be the appointment's own doctor) or `admin`. Resets the row to `pending` with
+`attempts` back to `0`.
+
+Response `202`: `{ "status": "pending" }`
+
+Errors: `404 NOT_FOUND` (no such appointment, or no visit notes submitted yet),
+`403 FORBIDDEN` (doctor not assigned to this appointment).
+
 ### `GET /api/appointments/:id/events`
 The appointment's own patient or doctor, or an admin - same access rule as
 `GET /api/appointments/:id/pre-visit-summary`.
@@ -381,8 +451,11 @@ The appointment's own patient or doctor, or an admin - same access rule as
 Response `200`: `{ "events": [ { "event", "actor", "detail", "createdAt" } ] }`, oldest
 first. `event` is one of `held`, `symptoms_submitted`, `confirmed`, `cancelled_by_patient`,
 `cancelled_by_doctor`, `cancelled_by_leave`, `expired`, `rescheduled`, `summary_ready`,
-`summary_failed`, `email_sent`, `calendar_event_created`, `calendar_event_deleted`.
-`actor` is `"patient:<id>"` / `"doctor:<id>"` / `"admin:<id>"` / `"system"`. Every row is
+`summary_failed`, `email_sent`, `calendar_event_created`, `calendar_event_deleted`,
+`notes_submitted`, `notes_amended`, `completed`, `post_visit_summary_ready`,
+`post_visit_summary_failed`, `medication_reminders_scheduled`,
+`medication_reminders_cancelled`. `actor` is `"patient:<id>"` / `"doctor:<id>"` /
+`"admin:<id>"` / `"system"`. Every row is
 written in the same transaction as the change it records - inserted by
 `services/events.js`'s `logEvent()`, never as a best-effort afterthought - so this is a
 faithful audit trail, not a log that can silently miss something.
@@ -466,8 +539,10 @@ Header: `x-job-secret: <config.jobs.secret>` (compared with `crypto.timingSafeEq
 in order:
 1. the hold-expiry sweep (`status='held' AND hold_expires_at < now()` -> `'expired'`)
 2. `generatePendingSummaries()` (see `docs/llm-prompts.md`)
-3. `queueDueReminders()` - scans `reminders WHERE status='scheduled' AND due_at <= now()`,
-   enqueues one `email/appointment_reminder` `outbox` row per due reminder, marks it `'queued'`
+3. `queueDueReminders()` - scans `reminders WHERE status='scheduled' AND due_at <= now()` across
+   all three kinds (`appointment_reminder`, `medication_reminder`, `follow_up`), enqueues one
+   `email` `outbox` row per due reminder (`event_type` matches the kind, except
+   `follow_up` -> `follow_up_reminder`), marks it `'queued'`
 4. `processOutboxBatch()` - the delivery worker (see `docs/system-design.md` §4): claims up to
    10 `email`- and `calendar`-topic rows together with `FOR UPDATE SKIP LOCKED`, acts on each
    exactly once this tick, and moves it to `sent`/back to `pending` with backoff/`failed` at
@@ -489,9 +564,6 @@ not configured on this deployment).
 
 ## Planned routes
 
-Documented as each lands.
-
-| Day | Method | Path | Role |
-|---|---|---|---|
-| 8 | POST | `/appointments/:id/notes` | doctor |
-| 8 | GET | `/appointments/:id/post-visit-summary` | patient |
+None currently - Day 8 (visit notes, prescriptions, post-visit summary, medication reminders)
+closed the last functional requirement in the brief. Days 9-10 are deployment, integration
+testing, and documentation, not new endpoints.

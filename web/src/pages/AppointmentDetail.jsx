@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../AuthContext.jsx';
 import AppointmentTimeline from '../components/AppointmentTimeline.jsx';
+import PostVisitSummaryCard from '../components/PostVisitSummaryCard.jsx';
 
 function formatDateTime(iso) {
   return new Date(iso).toLocaleString([], {
@@ -35,6 +36,13 @@ export default function AppointmentDetail() {
             <time dateTime={appointment.startsAt}>{formatDateTime(appointment.startsAt)}</time>
           </p>
         </>
+      )}
+
+      {appointment?.status === 'completed' && (
+        <section className="mb-8">
+          <h2 className="mb-3 text-sm font-medium text-ink/70">Visit summary</h2>
+          <PostVisitSummaryCard appointmentId={id} />
+        </section>
       )}
 
       <section>

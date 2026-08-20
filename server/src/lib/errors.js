@@ -26,6 +26,8 @@ export const emailTaken = () =>
   new AppError(409, 'EMAIL_TAKEN', 'An account with this email already exists.');
 export const symptomsRequired = () =>
   new AppError(409, 'SYMPTOMS_REQUIRED', 'A symptom form is required before confirming this appointment.');
+export const notesExist = () =>
+  new AppError(409, 'NOTES_EXIST', 'Visit notes have already been submitted for this appointment. Use PATCH to amend them.');
 export const unavailable = (message = 'Upstream service unavailable') =>
   new AppError(503, 'SERVICE_UNAVAILABLE', message);
 
