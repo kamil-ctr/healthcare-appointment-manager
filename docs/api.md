@@ -388,6 +388,54 @@ Errors: `400 BAD_REQUEST` (`date` malformed).
 
 ---
 
+## Google Calendar
+
+Full OAuth setup (Console steps, why publishing status must be "In production", scope,
+redirect URIs, token encryption) is in
+[`docs/google-calendar-setup.md`](google-calendar-setup.md). Every route requires
+`Authorization: Bearer <jwt>` **except** `/callback`, which is hit directly by Google's
+own redirect and has no bearer token at all - it's authenticated instead by a signed
+`state` parameter (HMAC over the user id + issue time, verified server-side, rejected if
+older than 10 minutes).
+
+### `GET /api/google/connect`
+Any authenticated role. Returns the Google consent URL as JSON rather than redirecting
+directly - the SPA calls this as a normal authenticated `fetch` (needs the bearer token,
+which a plain browser navigation can't send) and then performs the actual full-page
+navigation to Google itself.
+
+Response `200`: `{ "url": "https://accounts.google.com/o/oauth2/v2/auth?..." }`
+
+Errors: `503 SERVICE_UNAVAILABLE` (`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` not configured
+on this deployment).
+
+### `GET /api/google/callback`
+No bearer token - Google redirects the browser here directly with `?code=&state=`.
+Exchanges the code for tokens, encrypts and upserts the `google_accounts` row for the user
+identified by `state`, and redirects the browser back to the frontend
+(`/appointments?google=connected` or `?google=error`). If Google returns no
+`refresh_token` (a re-consent, not a first authorization), the previously stored one is
+kept rather than overwritten with nothing. Never throws to the browser - any failure
+(invalid/expired state, token exchange error, Google not configured) redirects to the
+`?google=error` variant instead of rendering a raw error page.
+
+### `DELETE /api/google/disconnect`
+Any authenticated role, own grant only (implicit from the JWT). Calls Google's revoke
+endpoint (best-effort - a failed revoke call still disconnects locally, so a flaky call
+here can never strand a user in a "connected" state they can't exit) and sets
+`revoked_at`. Existing `calendar_events` rows are left as-is for audit; a later booking's
+`calendar/event_create` row for this user dead-letters as `google_not_connected` instead
+of retrying.
+
+Response `200`: `{ "disconnected": true }`
+
+### `GET /api/google/status`
+Any authenticated role, own grant only.
+
+Response `200`: `{ "connected": boolean, "googleEmail": string|null, "connectedAt": string|null }`
+
+---
+
 ## Internal (cron trigger)
 
 No user JWT - authenticated by a shared secret instead, so an external cron pinger can
@@ -401,9 +449,11 @@ in order:
 3. `queueDueReminders()` - scans `reminders WHERE status='scheduled' AND due_at <= now()`,
    enqueues one `email/appointment_reminder` `outbox` row per due reminder, marks it `'queued'`
 4. `processOutboxBatch()` - the delivery worker (see `docs/system-design.md` §4): claims up to
-   10 `email`-topic rows with `FOR UPDATE SKIP LOCKED`, sends each exactly once this tick, and
-   moves it to `sent`/back to `pending` with backoff/`failed` at `max_attempts`. `calendar`-topic
-   rows are never claimed - Day 7's handler owns those.
+   10 `email`- and `calendar`-topic rows together with `FOR UPDATE SKIP LOCKED`, acts on each
+   exactly once this tick, and moves it to `sent`/back to `pending` with backoff/`failed` at
+   `max_attempts`. `calendar` rows go through the Google Calendar REST client
+   (`server/src/google/calendar.js`); a user with no `google_accounts` row or a revoked grant
+   dead-letters immediately as `google_not_connected` rather than retrying.
 
 Reminders are queued before the outbox runs, so a reminder that just came due can be delivered
 in the same tick it's queued in.
@@ -423,7 +473,5 @@ Documented as each lands.
 
 | Day | Method | Path | Role |
 |---|---|---|---|
-| 7 | GET | `/google/connect` | any |
-| 7 | GET | `/google/callback` | any |
 | 8 | POST | `/appointments/:id/notes` | doctor |
 | 8 | GET | `/appointments/:id/post-visit-summary` | patient |

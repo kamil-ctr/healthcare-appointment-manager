@@ -5,11 +5,11 @@ Patients book slots and submit symptoms in advance; an LLM produces a pre-visit 
 urgency level for the doctor and a patient-friendly summary after the visit. Both sides are kept
 informed through email and Google Calendar.
 
-> **Status:** Day 6 of 10 — the outbox worker (`FOR UPDATE SKIP LOCKED` claim,
-> exponential backoff, dead-lettering, stale-lock reclaim), Nodemailer email delivery
-> with a console-transport fallback, appointment reminders (24h/2h before, cancelled
-> alongside their appointment), and an admin notifications page. See
-> [Roadmap](#roadmap) for what lands next.
+> **Status:** Day 7 of 10 — Google Calendar OAuth 2.0 (native fetch, no `googleapis`
+> package), AES-256-GCM token encryption at rest, transparent access-token refresh,
+> and the calendar-topic outbox handler (create/update/delete events, idempotent
+> 404/410 handling, revoked-grant detection) - entirely optional, nothing in the
+> booking request path ever calls Google. See [Roadmap](#roadmap) for what lands next.
 
 ---
 
@@ -82,6 +82,11 @@ healthcare-appointment-manager/
 │       │   ├── prompts.js    # versioned prompts, injection-guard sanitisation
 │       │   ├── parse.js      # strict output validation
 │       │   └── pre-visit.js  # orchestrates call -> validate -> one repair -> give up
+│       ├── google/
+│       │   ├── crypto.js     # AES-256-GCM token encryption at rest (key from JWT_SECRET)
+│       │   ├── oauth.js      # connect/callback/disconnect/status, signed state param
+│       │   ├── tokens.js     # getAccessToken(): transparent refresh, revoked-grant handling
+│       │   └── calendar.js   # native-fetch Calendar REST client: create/patch/delete
 │       ├── mail/
 │       │   ├── transport.js  # one shared nodemailer transport, console fallback
 │       │   └── templates.js  # plain-literal email templates, doctor-timezone rendering
@@ -109,6 +114,7 @@ healthcare-appointment-manager/
 │           ├── doctors.js    # read-only, any authenticated role
 │           ├── appointments.js
 │           ├── doctor.js     # GET /api/doctor/queue
+│           ├── google.js     # OAuth connect/callback/disconnect/status (thin, calls google/)
 │           └── internal.js   # cron trigger
 └── web/
     ├── package.json
@@ -176,6 +182,20 @@ fresh clone with zero configuration. To send real email with a Gmail account:
    ```
 
 Any other SMTP provider works the same way - just set `SMTP_HOST`/`SMTP_PORT` accordingly.
+
+**Google Calendar (Day 7, optional).** Leave `GOOGLE_CLIENT_ID` blank and everything still
+works - booking, confirming, cancelling, rescheduling are all identical for a user who
+never connects Google; `GET /api/google/connect` just responds `503` instead of building a
+broken authorization URL. Full Console setup (project, OAuth consent screen, **why
+publishing status must be "In production" and not "Testing"** - Testing expires refresh
+tokens after 7 days, which would kill a demo judged weeks later - scope, redirect URIs) is
+in [`docs/google-calendar-setup.md`](docs/google-calendar-setup.md). Once you have a
+client id/secret:
+```
+GOOGLE_CLIENT_ID=<from the Console>
+GOOGLE_CLIENT_SECRET=<from the Console>
+GOOGLE_REDIRECT_URI=http://localhost:4000/api/google/callback
+```
 
 ### 4. Configure the frontend
 
@@ -267,9 +287,16 @@ leave cascade cancels any of those still `'scheduled'`, so a cancelled appointme
 **3. Google OAuth credentials live in `google_accounts`, never on `users`.**
 
 Tokens, expiry, scope, and `calendar_id` are isolated, so a user can connect or disconnect
-Calendar without touching their login. `calendar_events` maps each appointment to the Google event
+Calendar without touching their login - both `access_token` and `refresh_token` are
+encrypted at rest (AES-256-GCM, key derived from `JWT_SECRET`; see
+`docs/google-calendar-setup.md`). `calendar_events` maps each appointment to the Google event
 id **per user**, which is what makes update-on-reschedule and delete-on-cancel possible for both
-patient and doctor.
+patient and doctor - a *separate* event on each participant's own calendar, never one event with
+the other party invited as an attendee (avoids Google's own invitation emails, avoids attendee
+permission problems on personal accounts, and keeps the two calendars' lifecycles independent).
+Calendar is entirely optional: nothing in the booking/confirm/cancel/reschedule request path
+ever calls Google - only the outbox worker does, on its own tick, and a user who never connects
+just gets `calendar`-topic rows that dead-letter immediately as `google_not_connected`.
 
 ---
 
@@ -296,7 +323,7 @@ the doctor, never a crash or a blocked booking.
 | 4 | Slot generation, hold/confirm flow, **concurrency test** | ✅ done |
 | 5 | Symptom form, pre-visit LLM summary, doctor queue | ✅ done |
 | 6 | Outbox worker, Nodemailer, booking/cancellation emails | ✅ done |
-| 7 | Google Calendar OAuth, create/update/delete events | |
+| 7 | Google Calendar OAuth, create/update/delete events | ✅ done |
 | 8 | Post-visit notes, prescriptions, medication reminders | |
 | 9 | Deployment + integration testing | |
 | 10 | Documentation, system-design write-up, final audit | |

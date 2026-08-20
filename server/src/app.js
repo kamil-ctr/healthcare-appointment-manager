@@ -5,6 +5,7 @@ import { adminRouter } from './routes/admin.js';
 import { doctorsRouter } from './routes/doctors.js';
 import { appointmentsRouter } from './routes/appointments.js';
 import { doctorRouter } from './routes/doctor.js';
+import { googleRouter } from './routes/google.js';
 import { internalRouter } from './routes/internal.js';
 import {
   cors,
@@ -32,6 +33,7 @@ export function createApp() {
   app.use('/api/doctors', doctorsRouter);
   app.use('/api/appointments', appointmentsRouter);
   app.use('/api/doctor', doctorRouter);
+  app.use('/api/google', googleRouter);
   app.use('/api/internal', internalRouter);
 
   app.use(notFoundHandler);

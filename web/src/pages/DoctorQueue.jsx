@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../AuthContext.jsx';
+import { useToast } from '../components/Toast.jsx';
 import UrgencyBadge from '../components/UrgencyBadge.jsx';
+import GoogleCalendarConnect from '../components/GoogleCalendarConnect.jsx';
 
 // See Book.jsx for why this isn't date.toISOString().slice(0, 10).
 function toISODate(date) {
@@ -25,6 +27,8 @@ function summaryStatusLabel(status) {
 /** The doctor's landing page: today's confirmed appointments, urgency-sorted. */
 export default function DoctorQueue() {
   const { call, auth } = useAuth();
+  const { notify } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [date, setDate] = useState(toISODate(new Date()));
   const [state, setState] = useState({ status: 'loading' });
 
@@ -37,10 +41,26 @@ export default function DoctorQueue() {
 
   useEffect(load, [load]);
 
+  useEffect(() => {
+    const g = searchParams.get('google');
+    if (!g) return;
+    if (g === 'connected') notify('Google Calendar connected.', 'success');
+    else if (g === 'error') notify('Could not connect Google Calendar. Please try again.', 'error');
+    setSearchParams(
+      (prev) => {
+        prev.delete('google');
+        return prev;
+      },
+      { replace: true }
+    );
+  }, [searchParams, setSearchParams, notify]);
+
   return (
     <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
       <h1 className="mb-1 text-2xl">Queue</h1>
       <p className="mb-6 text-sm text-ink/60">{auth.user.fullName}</p>
+
+      <GoogleCalendarConnect />
 
       <input
         type="date"

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../AuthContext.jsx';
 import { useToast } from '../components/Toast.jsx';
 import SlotRail from '../components/SlotRail.jsx';
 import HoldCountdown from '../components/HoldCountdown.jsx';
+import GoogleCalendarConnect from '../components/GoogleCalendarConnect.jsx';
 
 function formatDateTime(iso) {
   return new Date(iso).toLocaleString([], {
@@ -37,6 +39,7 @@ function toISODate(date) {
 export default function Appointments() {
   const { call } = useAuth();
   const { notify } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [state, setState] = useState({ status: 'loading' });
   const [reschedulingId, setReschedulingId] = useState(null);
   const [rescheduleSlots, setRescheduleSlots] = useState({});
@@ -50,6 +53,20 @@ export default function Appointments() {
   }, [call]);
 
   useEffect(load, [load]);
+
+  useEffect(() => {
+    const g = searchParams.get('google');
+    if (!g) return;
+    if (g === 'connected') notify('Google Calendar connected.', 'success');
+    else if (g === 'error') notify('Could not connect Google Calendar. Please try again.', 'error');
+    setSearchParams(
+      (prev) => {
+        prev.delete('google');
+        return prev;
+      },
+      { replace: true }
+    );
+  }, [searchParams, setSearchParams, notify]);
 
   async function handleCancel(id) {
     try {
@@ -183,6 +200,8 @@ export default function Appointments() {
   return (
     <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
       <h1 className="mb-6 text-2xl">My appointments</h1>
+
+      <GoogleCalendarConnect />
 
       <section className="mb-8">
         <h2 className="mb-3 text-sm font-medium text-ink/70">Upcoming</h2>
