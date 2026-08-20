@@ -8,6 +8,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import { config } from '../config.js';
 import { expireHolds } from './expire-holds.js';
+import { generatePendingSummaries } from './ai-summaries.js';
 
 let intervalHandle;
 
@@ -26,8 +27,14 @@ export function stopJobRunner() {
 
 export async function runJobs() {
   const { expired } = await expireHolds();
+  const { processed, ready, failed } = await generatePendingSummaries();
   // Day 6: const { sent, failed } = await processOutboxBatch();
-  return { expiredHolds: expired };
+  return {
+    expiredHolds: expired,
+    summariesProcessed: processed,
+    summariesReady: ready,
+    summariesFailed: failed,
+  };
 }
 
 /** 'unset' | 'invalid' | 'ok'. Constant-time so timing can't leak the secret. */

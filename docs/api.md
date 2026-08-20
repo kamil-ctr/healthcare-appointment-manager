@@ -19,6 +19,7 @@ All responses are JSON. Errors share one shape:
 | 409 | `SLOT_TAKEN` | Another appointment already holds/confirms that doctor+time |
 | 409 | `PATIENT_BUSY` | Patient already holds/confirms a different doctor at that instant |
 | 409 | `HOLD_EXPIRED` | The hold window passed before confirm |
+| 409 | `SYMPTOMS_REQUIRED` | Appointment cannot be confirmed without a submitted symptom form |
 | 503 | `SERVICE_UNAVAILABLE` | Database/upstream provider unreachable, or a required secret unset |
 
 Authenticated routes expect `Authorization: Bearer <jwt>`.
@@ -264,7 +265,10 @@ same transaction, enqueues `email/booking_confirmation` and `calendar/event_crea
 rows for both patient and doctor - nothing is sent inline.
 
 Errors: `404 NOT_FOUND`, `403 FORBIDDEN` (not your appointment), `409 CONFLICT` (not
-currently `held` - e.g. confirming a second time), `409 HOLD_EXPIRED` (hold window passed).
+currently `held` - e.g. confirming a second time), `409 HOLD_EXPIRED` (hold window passed),
+`409 SYMPTOMS_REQUIRED` (no `symptom_forms` row exists for this appointment yet - the
+pre-visit **summary** is allowed to still be `pending`/`failed`; only the raw form is
+required, since confirming can never depend on the LLM).
 
 ### `POST /api/appointments/:id/cancel`
 `patient` or `doctor`, own appointments only.
@@ -301,6 +305,61 @@ Response `200`: `{ "appointments": [ { "id", "status", "startsAt", "endsAt", "re
 "cancelReason", "holdExpiresAt", "rescheduledFrom", "doctorId", "doctorName",
 "doctorSpecialisation", "patientName" } ] }`
 
+### `POST /api/appointments/:id/symptoms`
+`patient` only, owner only. Inserts the symptom form **and** a `pending` `ai_summaries` row in
+one transaction. The LLM is never called inline - the patient is mid-hold with a countdown
+running and must not wait on an external API. `POST /api/internal/jobs/tick` picks the row up
+on the next tick (see below).
+
+Request: `{ "symptoms": "...", "duration": "3 days", "severity": 6,
+"existingConditions": "...", "currentMedications": "...", "allergies": "..." }` - only
+`symptoms` is required; `severity` (if present) must be an integer 1-10.
+
+Response `201`: `{ "symptomFormId", "aiSummaryId", "status": "pending" }`
+
+Errors: `400 BAD_REQUEST` (`symptoms` missing, `severity` out of range), `404 NOT_FOUND`,
+`403 FORBIDDEN` (not your appointment), `409 CONFLICT` (appointment not `held`/`confirmed`,
+or a symptom form was already submitted for this appointment - `symptom_forms.appointment_id`
+is unique).
+
+### `GET /api/appointments/:id/pre-visit-summary`
+The appointment's own doctor, the owning patient, or an admin.
+
+Response `200`: `{ "status": "pending"|"ready"|"failed", "urgency", "content", "generatedAt" }`.
+When `status` is `'failed'` or `'pending'`, the response **also** includes
+`"symptomForm": { "symptoms", "duration", "severity", "existingConditions",
+"currentMedications", "allergies" }` - the doctor always has something clinically useful, even
+when the model hasn't run yet or gave up.
+
+Errors: `404 NOT_FOUND` (no such appointment, or no symptom form submitted yet),
+`403 FORBIDDEN` (not your appointment / not the assigned doctor).
+
+### `POST /api/appointments/:id/pre-visit-summary/retry`
+`doctor` (must be the appointment's own doctor) or `admin`. Resets the row to `pending` with
+`attempts` back to `0`.
+
+Response `202`: `{ "status": "pending" }`
+
+Errors: `404 NOT_FOUND` (no such appointment, or no symptom form submitted yet),
+`403 FORBIDDEN` (doctor not assigned to this appointment).
+
+---
+
+## Doctor
+
+Requires `Authorization: Bearer <jwt>` for a `doctor` user.
+
+### `GET /api/doctor/queue?date=`
+That doctor's `confirmed` appointments for `date` (`YYYY-MM-DD`, default today), matched in the
+**doctor's own timezone** (`AT TIME ZONE doctors.timezone`, same convention as
+`GET /api/doctors/:id/slots`). Sorted `High` → `Medium` → `Low` urgency (no/unset urgency
+sorts last), then by time.
+
+Response `200`: `{ "queue": [ { "appointmentId", "startsAt", "endsAt", "patientName",
+"summaryStatus": "pending"|"ready"|"failed"|null, "urgency": "Low"|"Medium"|"High"|null } ] }`
+
+Errors: `400 BAD_REQUEST` (`date` malformed).
+
 ---
 
 ## Internal (cron trigger)
@@ -310,10 +369,14 @@ drive the sweep on hosting tiers that sleep idle instances between requests.
 
 ### `POST /api/internal/jobs/tick`
 Header: `x-job-secret: <config.jobs.secret>` (compared with `crypto.timingSafeEqual`).
-Currently runs the hold-expiry sweep (`status='held' AND hold_expires_at < now()` ->
-`'expired'`); the Day 6 outbox worker plugs into the same tick.
+Runs the hold-expiry sweep (`status='held' AND hold_expires_at < now()` -> `'expired'`) and
+`generatePendingSummaries()` (claims up to 5 `pending`/`failed` `ai_summaries` rows with
+`attempts < 3` via `FOR UPDATE SKIP LOCKED`, calls the LLM, validates, and marks each `ready`
+or `failed` - never more than one attempt per row per tick, see `docs/llm-prompts.md`). The
+Day 6 outbox worker plugs into the same tick.
 
-Response `200`: `{ "expiredHolds": 3 }`
+Response `200`: `{ "expiredHolds": 3, "summariesProcessed": 2, "summariesReady": 1,
+"summariesFailed": 1 }`
 
 Errors: `401 UNAUTHORIZED` (wrong secret), `503 SERVICE_UNAVAILABLE` (`JOB_TRIGGER_SECRET`
 not configured on this deployment).
@@ -326,8 +389,6 @@ Documented as each lands.
 
 | Day | Method | Path | Role |
 |---|---|---|---|
-| 5 | POST | `/appointments/:id/symptoms` | patient |
-| 5 | GET | `/appointments/:id/pre-visit-summary` | doctor |
 | 7 | GET | `/google/connect` | any |
 | 7 | GET | `/google/callback` | any |
 | 8 | POST | `/appointments/:id/notes` | doctor |

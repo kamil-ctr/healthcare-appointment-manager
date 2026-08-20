@@ -5,9 +5,11 @@ Patients book slots and submit symptoms in advance; an LLM produces a pre-visit 
 urgency level for the doctor and a patient-friendly summary after the visit. Both sides are kept
 informed through email and Google Calendar.
 
-> **Status:** Day 4 of 10 — booking engine (timezone-correct slot generation, hold →
-> confirm, cancel, reschedule, hold-expiry sweep) and a full patient-facing frontend
-> with its own design system. See [Roadmap](#roadmap) for what lands next.
+> **Status:** Day 5 of 10 — symptom capture, pre-visit LLM triage summary (urgency +
+> chief complaint + suggested questions), the doctor's urgency-sorted queue, and full
+> LLM failure handling (timeout/auth/malformed-output/rate-limit, all with graceful
+> degradation - booking never depends on the model). See [Roadmap](#roadmap) for what
+> lands next.
 
 ---
 
@@ -21,7 +23,7 @@ informed through email and Google Calendar.
 | Auth | JWT signed with `node:crypto` HMAC; passwords hashed with scrypt |
 | Email | Nodemailer over SMTP |
 | Calendar | Google Calendar REST API + OAuth 2.0 via native `fetch` |
-| LLM | Provider REST API via native `fetch` |
+| LLM | Groq (OpenAI-compatible chat completions API) via native `fetch` |
 
 ### Dependency policy
 
@@ -56,6 +58,7 @@ healthcare-appointment-manager/
 ├── docs/
 │   ├── schema.sql            # full PostgreSQL schema (idempotent)
 │   ├── api.md                # endpoint reference
+│   ├── llm-prompts.md        # exact prompts, schema, retry/give-up policy, injection guard
 │   └── system-design.md      # 800-word write-up (deliverable 4)
 ├── server/
 │   ├── package.json
@@ -74,22 +77,38 @@ healthcare-appointment-manager/
 │       │   ├── password.js   # scrypt hash/verify
 │       │   ├── jwt.js        # hand-rolled HS256 sign/verify
 │       │   └── validate.js   # required/isEmail/minLength/oneOf/isDateString
+│       ├── llm/
+│       │   ├── client.js     # native-fetch Groq client, typed LlmError, timeout+retry
+│       │   ├── prompts.js    # versioned prompts, injection-guard sanitisation
+│       │   ├── parse.js      # strict output validation
+│       │   └── pre-visit.js  # orchestrates call -> validate -> one repair -> give up
 │       ├── middleware/
 │       │   ├── core.js
 │       │   └── auth.js       # requireAuth, requireRole(...)
 │       ├── services/
 │       │   ├── doctors.js    # doctor CRUD, availability
-│       │   └── leave.js      # leave + appointment-cancellation cascade
+│       │   ├── leave.js      # leave + appointment-cancellation cascade
+│       │   ├── appointments.js
+│       │   ├── slots.js
+│       │   ├── symptoms.js   # symptom form submission, pre-visit summary get/retry
+│       │   └── queue.js      # doctor's urgency-sorted daily queue
+│       ├── jobs/
+│       │   ├── runner.js
+│       │   ├── expire-holds.js
+│       │   └── ai-summaries.js  # generatePendingSummaries(), one attempt per row per tick
 │       └── routes/
 │           ├── health.js
 │           ├── auth.js
 │           ├── admin.js      # admin-only: doctors, availability, leave
-│           └── doctors.js    # read-only, any authenticated role
+│           ├── doctors.js    # read-only, any authenticated role
+│           ├── appointments.js
+│           ├── doctor.js     # GET /api/doctor/queue
+│           └── internal.js   # cron trigger
 └── web/
     ├── package.json
     ├── vite.config.js
     ├── index.html
-    └── src/{main.jsx, App.jsx, api.js, styles.css, AuthContext.jsx, LoginPage.jsx, AdminApp.jsx}
+    └── src/{main.jsx, App.jsx, api.js, styles.css, AuthContext.jsx, pages/, components/}
 ```
 
 ---
@@ -129,7 +148,20 @@ npm run migrate      # applies ../docs/schema.sql — safe to re-run
 
 Expected output: `[migrate] done. 13 tables present: ...`
 
-### 4. Run
+Set `LLM_API_KEY` to a [Groq](https://console.groq.com) API key to enable the pre-visit
+summary (Day 5) - a blank key degrades gracefully (booking still works; the doctor sees the
+raw symptom form with a "Summary unavailable" retry button instead of a generated summary).
+
+### 4. Configure the frontend
+
+```bash
+cp web/.env.example web/.env
+```
+
+`VITE_API_URL` defaults to `http://localhost:4000` for local dev; point it at the deployed
+backend URL in production.
+
+### 5. Run
 
 ```bash
 # terminal 1 — API on http://localhost:4000
@@ -141,7 +173,7 @@ cd web && npm install && npm run dev
 
 Open <http://localhost:5173>. Both checks on the page should read green.
 
-### 5. Verify the concurrency guarantee
+### 6. Verify the concurrency guarantee
 
 ```bash
 cd server && node --env-file=.env scripts/concurrency-check.js
@@ -210,6 +242,19 @@ patient and doctor.
 
 ---
 
+## LLM: pre-visit triage summary
+
+Full prompts, JSON schema, validation rules, retry/give-up policy, and the prompt-injection
+guard (with a verified real test case) are documented in
+[`docs/llm-prompts.md`](docs/llm-prompts.md). The short version: the model is never called
+inside a request handler (`POST /api/appointments/:id/symptoms` only inserts a `pending`
+`ai_summaries` row), confirming an appointment never depends on the summary being ready, and
+every failure mode - timeout, missing/invalid key, rate limit, malformed output surviving one
+repair attempt - degrades to a `failed` row with the raw symptom form still fully visible to
+the doctor, never a crash or a blocked booking.
+
+---
+
 ## Roadmap
 
 | Day | Scope | Status |
@@ -218,7 +263,7 @@ patient and doctor.
 | 2 | Auth: register/login, scrypt, JWT, role middleware, admin seed | ✅ done |
 | 3 | Admin portal: doctor CRUD, availability, leave days | ✅ done |
 | 4 | Slot generation, hold/confirm flow, **concurrency test** | ✅ done |
-| 5 | Symptom form, pre-visit LLM summary, doctor queue | |
+| 5 | Symptom form, pre-visit LLM summary, doctor queue | ✅ done |
 | 6 | Outbox worker, Nodemailer, booking/cancellation emails | |
 | 7 | Google Calendar OAuth, create/update/delete events | |
 | 8 | Post-visit notes, prescriptions, medication reminders | |

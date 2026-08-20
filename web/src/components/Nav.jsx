@@ -25,6 +25,11 @@ export default function Nav() {
               My appointments
             </Link>
           )}
+          {auth?.user.role === 'doctor' && (
+            <Link to="/doctor" className="text-ink hover:text-primary">
+              My queue
+            </Link>
+          )}
           {auth?.user.role === 'admin' && (
             <Link to="/admin" className="text-ink hover:text-primary">
               Admin

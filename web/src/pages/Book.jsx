@@ -4,6 +4,7 @@ import { useAuth } from '../AuthContext.jsx';
 import { useToast } from '../components/Toast.jsx';
 import SlotRail from '../components/SlotRail.jsx';
 import HoldCountdown from '../components/HoldCountdown.jsx';
+import SymptomForm from '../components/SymptomForm.jsx';
 
 // NOT date.toISOString().slice(0, 10) - that converts to UTC first, which
 // silently shifts the calendar date by a day on any non-UTC-offset
@@ -35,6 +36,7 @@ export default function Book() {
   const [loadingSlots, setLoadingSlots] = useState(true);
   const [hold, setHold] = useState(null); // { appointmentId, startsAt, endsAt, holdExpiresAt }
   const [holdExpiredNotice, setHoldExpiredNotice] = useState(false);
+  const [symptomsSubmitted, setSymptomsSubmitted] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState('');
 
@@ -63,6 +65,7 @@ export default function Book() {
         body: { doctorId, startsAt },
       });
       setHold(result);
+      setSymptomsSubmitted(false);
     } catch (err) {
       setError(err.message);
       refetchSlots();
@@ -82,6 +85,8 @@ export default function Book() {
         setHold(null);
         setHoldExpiredNotice(true);
         refetchSlots();
+      } else if (err.code === 'SYMPTOMS_REQUIRED') {
+        setSymptomsSubmitted(false);
       }
     } finally {
       setConfirming(false);
@@ -90,6 +95,7 @@ export default function Book() {
 
   function handleHoldExpire() {
     setHold(null);
+    setSymptomsSubmitted(false);
     setHoldExpiredNotice(true);
     refetchSlots();
   }
@@ -152,12 +158,25 @@ export default function Book() {
           <p className="mt-1">
             <HoldCountdown expiresAt={hold.holdExpiresAt} onExpire={handleHoldExpire} />
           </p>
+
+          {symptomsSubmitted ? (
+            <p className="mt-4 text-sm text-primary">Symptom form submitted.</p>
+          ) : (
+            <div className="mt-4 border-t border-primary/20 pt-4">
+              <SymptomForm
+                appointmentId={hold.appointmentId}
+                onSubmitted={() => setSymptomsSubmitted(true)}
+              />
+            </div>
+          )}
+
           {error && <p className="mt-3 text-sm text-urgent">{error}</p>}
           <div className="mt-4 flex gap-3">
             <button
               type="button"
               onClick={handleConfirm}
-              disabled={confirming}
+              disabled={confirming || !symptomsSubmitted}
+              title={symptomsSubmitted ? undefined : 'Submit the symptom form to enable confirming'}
               className="rounded-[var(--radius-card)] bg-primary px-5 py-2 text-white transition-colors hover:bg-primary/90 disabled:opacity-60"
             >
               {confirming ? 'Confirming...' : 'Confirm appointment'}
@@ -166,6 +185,7 @@ export default function Book() {
               type="button"
               onClick={() => {
                 setHold(null);
+                setSymptomsSubmitted(false);
                 refetchSlots();
               }}
               className="rounded-[var(--radius-card)] border border-line px-5 py-2 hover:border-primary hover:text-primary"

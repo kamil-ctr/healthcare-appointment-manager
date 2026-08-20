@@ -9,6 +9,11 @@ import {
   rescheduleAppointment,
   listAppointments,
 } from '../services/appointments.js';
+import {
+  submitSymptomForm,
+  getPreVisitSummary,
+  retryPreVisitSummary,
+} from '../services/symptoms.js';
 
 export const appointmentsRouter = Router();
 
@@ -60,5 +65,33 @@ appointmentsRouter.get(
     const { status, from, to } = req.query;
     const appointments = await listAppointments({ user: req.user, status, from, to });
     res.json({ appointments });
+  })
+);
+
+appointmentsRouter.post(
+  '/:id/symptoms',
+  requireRole('patient'),
+  asyncHandler(async (req, res) => {
+    const body = req.body ?? {};
+    required(body, ['symptoms']);
+    const result = await submitSymptomForm(req.params.id, req.user.id, body);
+    res.status(201).json(result);
+  })
+);
+
+appointmentsRouter.get(
+  '/:id/pre-visit-summary',
+  asyncHandler(async (req, res) => {
+    const result = await getPreVisitSummary(req.params.id, req.user);
+    res.json(result);
+  })
+);
+
+appointmentsRouter.post(
+  '/:id/pre-visit-summary/retry',
+  requireRole('doctor', 'admin'),
+  asyncHandler(async (req, res) => {
+    const result = await retryPreVisitSummary(req.params.id, req.user);
+    res.status(202).json(result);
   })
 );

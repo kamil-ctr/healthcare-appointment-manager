@@ -1,5 +1,4 @@
 import { Routes, Route } from 'react-router-dom';
-import { useAuth } from './AuthContext.jsx';
 import Nav from './components/Nav.jsx';
 import RequireAuth from './components/RequireAuth.jsx';
 import Home from './pages/Home.jsx';
@@ -10,16 +9,8 @@ import Appointments from './pages/Appointments.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import AdminDoctors from './pages/admin/AdminDoctors.jsx';
-
-function DoctorPortalPlaceholder() {
-  const { auth } = useAuth();
-  return (
-    <main className="mx-auto max-w-xl px-4 py-16 text-center sm:px-6">
-      <h1 className="mb-2 text-2xl">Welcome, {auth.user.fullName}</h1>
-      <p className="text-ink/60">The doctor portal isn't built yet.</p>
-    </main>
-  );
-}
+import DoctorQueue from './pages/DoctorQueue.jsx';
+import DoctorAppointmentDetail from './pages/DoctorAppointmentDetail.jsx';
 
 export default function App() {
   return (
@@ -71,10 +62,18 @@ export default function App() {
           }
         />
         <Route
-          path="/doctor-portal"
+          path="/doctor"
           element={
             <RequireAuth roles={['doctor']}>
-              <DoctorPortalPlaceholder />
+              <DoctorQueue />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/doctor/appointments/:id"
+          element={
+            <RequireAuth roles={['doctor']}>
+              <DoctorAppointmentDetail />
             </RequireAuth>
           }
         />

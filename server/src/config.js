@@ -61,10 +61,10 @@ export const config = {
     password: process.env.ADMIN_PASSWORD || '',
   },
 
-  // Filled in on later days; declared here so the shape is visible from day 1.
+  // Groq's OpenAI-compatible chat completions API (see server/src/llm/client.js).
   llm: {
     apiKey: process.env.LLM_API_KEY || '',
-    model: process.env.LLM_MODEL || 'claude-sonnet-4-6',
+    model: process.env.LLM_MODEL || 'openai/gpt-oss-120b',
     timeoutMs: int(process.env.LLM_TIMEOUT_MS, 15000),
   },
   mail: {

@@ -4,14 +4,10 @@
  * `appointments` - never by a SELECT-then-INSERT check in this file.
  */
 import { one, many, withTransaction } from '../db/pool.js';
-import { AppError, badRequest, notFound, forbidden, conflict } from '../lib/errors.js';
+import { AppError, badRequest, notFound, forbidden, conflict, symptomsRequired } from '../lib/errors.js';
 import { config } from '../config.js';
 
 const MAX_HORIZON_MS = 30 * 24 * 60 * 60 * 1000;
-
-// TODO(day5): flip to true once patients submit a symptom form during the
-// hold window, and confirm should refuse to proceed without one.
-const REQUIRE_SYMPTOM_FORM_BEFORE_CONFIRM = false;
 
 function slotTaken() {
   return new AppError(409, 'SLOT_TAKEN', 'That slot was just taken.');
@@ -141,15 +137,13 @@ export async function confirmAppointment(appointmentId, patientId) {
     }
     if (!(new Date(appt.hold_expires_at) > new Date())) throw holdExpired();
 
-    if (REQUIRE_SYMPTOM_FORM_BEFORE_CONFIRM) {
-      const form = await client.query(`SELECT 1 FROM symptom_forms WHERE appointment_id = $1`, [
-        appointmentId,
-      ]);
-      if (form.rows.length === 0) {
-        throw badRequest('A symptom form is required before confirming.', {
-          fields: ['appointmentId'],
-        });
-      }
+    // The summary itself is allowed to still be pending/failed - only the
+    // symptom form is required. Booking can never depend on the model.
+    const form = await client.query(`SELECT 1 FROM symptom_forms WHERE appointment_id = $1`, [
+      appointmentId,
+    ]);
+    if (form.rows.length === 0) {
+      throw symptomsRequired();
     }
 
     await client.query(
@@ -309,6 +303,48 @@ export async function rescheduleAppointment(appointmentId, patientId, newStartsA
         [old.doctor_id, patientId, newStartsAt, newEndsAt, config.booking.holdMinutes, appointmentId]
       );
       const newAppt = inserted[0];
+
+      // The symptom form (and whatever the model already made of it) belongs
+      // to the visit, not the slot - carry both onto the new held row so a
+      // rescheduled appointment can still clear the confirm gate below
+      // without the patient re-typing their symptoms or the model re-running.
+      const { rows: formRows } = await client.query(
+        `SELECT symptoms, duration, severity, existing_conditions, current_medications, allergies
+           FROM symptom_forms WHERE appointment_id = $1`,
+        [appointmentId]
+      );
+      if (formRows[0]) {
+        const f = formRows[0];
+        await client.query(
+          `INSERT INTO symptom_forms
+             (appointment_id, symptoms, duration, severity, existing_conditions, current_medications, allergies)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [newAppt.appointmentId, f.symptoms, f.duration, f.severity, f.existing_conditions, f.current_medications, f.allergies]
+        );
+
+        const { rows: summaryRows } = await client.query(
+          `SELECT status, urgency, content, raw_response, model, prompt_version, attempts, last_error
+             FROM ai_summaries WHERE appointment_id = $1 AND kind = 'pre_visit'`,
+          [appointmentId]
+        );
+        const s = summaryRows[0];
+        await client.query(
+          `INSERT INTO ai_summaries
+             (appointment_id, kind, status, urgency, content, raw_response, model, prompt_version, attempts, last_error)
+           VALUES ($1, 'pre_visit', $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [
+            newAppt.appointmentId,
+            s?.status ?? 'pending',
+            s?.urgency ?? null,
+            s?.content ?? null,
+            s?.raw_response ?? null,
+            s?.model ?? null,
+            s?.prompt_version ?? null,
+            s?.attempts ?? 0,
+            s?.last_error ?? null,
+          ]
+        );
+      }
 
       for (const e of events) {
         await client.query(
