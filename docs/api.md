@@ -175,7 +175,9 @@ is rejected together** - a rejected request never changes any stored availabilit
 ### `POST /api/admin/doctors/:id/leave`
 Records a full-day leave and, in the same transaction, cancels every `held`/`confirmed`
 appointment that falls on that date **in the doctor's own timezone** (not UTC - see
-`docs/system-design.md` §2) and queues their notifications as `outbox` rows.
+`docs/system-design.md` §2), cancels their still-`'scheduled'` `reminders` rows, and queues
+their notifications as `outbox` rows (one `leave_cancellation` per patient plus one
+`leave_cancellation_summary` for the doctor).
 
 Request: `{ "date": "2026-08-27", "reason": "Conference" }` (`reason` optional).
 
@@ -195,6 +197,26 @@ Re-booking is the correct path back to a confirmed slot, not un-cancelling.
 Response `200`: `{ "removed": true }`
 
 Errors: `404 NOT_FOUND` (no leave recorded for that doctor/date).
+
+### `GET /api/admin/outbox?status=&topic=&page=`
+Paginated (50 per page), newest first. `status` filters exactly (`pending`/`processing`/
+`sent`/`failed`); `topic` filters exactly (`email`/`calendar`); `page` defaults to `1`.
+
+Response `200`: `{ "rows": [ { "id", "topic", "eventType", "status", "attempts",
+"maxAttempts", "nextRetryAt", "lockedAt", "lastError", "createdAt", "sentAt" } ],
+"page", "pageSize", "total" }`
+
+Errors: `400 BAD_REQUEST` (`status`/`topic` not a recognised value).
+
+### `POST /api/admin/outbox/:id/retry`
+Resets a dead-lettered row: `status` back to `'pending'`, `attempts` to `0`, `last_error`
+cleared, `next_retry_at` to now - picked up on the next tick like any other pending row.
+
+Response `200`: `{ "status": "pending" }`
+
+Errors: `404 NOT_FOUND`, `409 CONFLICT` (row is not currently `'failed'` - only a
+dead-lettered row can be retried this way; a `pending`/`processing` row is already on its
+own retry schedule, and a `sent` row has nothing to retry).
 
 ---
 
@@ -262,7 +284,8 @@ patient already holds/confirms a **different** doctor at that exact instant - re
 
 Response `200`: `{ "appointmentId", "status": "confirmed", "startsAt", "endsAt" }`. In the
 same transaction, enqueues `email/booking_confirmation` and `calendar/event_create` outbox
-rows for both patient and doctor - nothing is sent inline.
+rows for both patient and doctor, and schedules two `reminders` rows for the patient (24h and
+2h before `startsAt`, skipping any whose `due_at` has already passed) - nothing is sent inline.
 
 Errors: `404 NOT_FOUND`, `403 FORBIDDEN` (not your appointment), `409 CONFLICT` (not
 currently `held` - e.g. confirming a second time), `409 HOLD_EXPIRED` (hold window passed),
@@ -277,8 +300,10 @@ Request: `{ "reason": "..." }` (optional).
 
 Response `200`: `{ "appointmentId", "status": "cancelled_by_patient" | "cancelled_by_doctor" }`.
 Enqueues `email/booking_cancelled` for both parties and `calendar/event_delete` for every
-active `calendar_events` row. Because `unique_active_appointment` is partial, the slot is
-bookable again the instant this commits - no separate cleanup step.
+active `calendar_events` row, and cancels (`status = 'cancelled'`) any still-`'scheduled'`
+`reminders` row for this appointment - a cancelled appointment must never send a reminder.
+Because `unique_active_appointment` is partial, the slot is bookable again the instant this
+commits - no separate cleanup step.
 
 Errors: `404 NOT_FOUND`, `403 FORBIDDEN` (not your appointment), `409 CONFLICT` (not
 `held`/`confirmed`).
@@ -290,7 +315,8 @@ Request: `{ "startsAt": "2026-08-21T21:00:00.000Z" }`
 
 Response `201`: `{ "appointmentId", "startsAt", "endsAt", "holdExpiresAt", "holdSeconds",
 "rescheduledFrom" }` - a **new** `held` row; the old row is cancelled
-(`cancel_reason: "Rescheduled"`) with `rescheduled_from` pointing back to it. Enqueues
+(`cancel_reason: "Rescheduled"`) with `rescheduled_from` pointing back to it, and its
+still-`'scheduled'` `reminders` rows are cancelled the same way `/cancel` does. Enqueues
 `calendar/event_update` (carrying the existing `google_event_id`) for every party with an
 active calendar event.
 
@@ -368,15 +394,23 @@ No user JWT - authenticated by a shared secret instead, so an external cron ping
 drive the sweep on hosting tiers that sleep idle instances between requests.
 
 ### `POST /api/internal/jobs/tick`
-Header: `x-job-secret: <config.jobs.secret>` (compared with `crypto.timingSafeEqual`).
-Runs the hold-expiry sweep (`status='held' AND hold_expires_at < now()` -> `'expired'`) and
-`generatePendingSummaries()` (claims up to 5 `pending`/`failed` `ai_summaries` rows with
-`attempts < 3` via `FOR UPDATE SKIP LOCKED`, calls the LLM, validates, and marks each `ready`
-or `failed` - never more than one attempt per row per tick, see `docs/llm-prompts.md`). The
-Day 6 outbox worker plugs into the same tick.
+Header: `x-job-secret: <config.jobs.secret>` (compared with `crypto.timingSafeEqual`). Runs,
+in order:
+1. the hold-expiry sweep (`status='held' AND hold_expires_at < now()` -> `'expired'`)
+2. `generatePendingSummaries()` (see `docs/llm-prompts.md`)
+3. `queueDueReminders()` - scans `reminders WHERE status='scheduled' AND due_at <= now()`,
+   enqueues one `email/appointment_reminder` `outbox` row per due reminder, marks it `'queued'`
+4. `processOutboxBatch()` - the delivery worker (see `docs/system-design.md` §4): claims up to
+   10 `email`-topic rows with `FOR UPDATE SKIP LOCKED`, sends each exactly once this tick, and
+   moves it to `sent`/back to `pending` with backoff/`failed` at `max_attempts`. `calendar`-topic
+   rows are never claimed - Day 7's handler owns those.
+
+Reminders are queued before the outbox runs, so a reminder that just came due can be delivered
+in the same tick it's queued in.
 
 Response `200`: `{ "expiredHolds": 3, "summariesProcessed": 2, "summariesReady": 1,
-"summariesFailed": 1 }`
+"summariesFailed": 1, "remindersQueued": 1, "outboxClaimed": 4, "outboxSent": 3,
+"outboxRetried": 1, "outboxFailed": 0 }`
 
 Errors: `401 UNAUTHORIZED` (wrong secret), `503 SERVICE_UNAVAILABLE` (`JOB_TRIGGER_SECRET`
 not configured on this deployment).

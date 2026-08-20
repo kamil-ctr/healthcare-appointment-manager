@@ -11,6 +11,7 @@ import {
   setDoctorAvailability,
 } from '../services/doctors.js';
 import { createLeaveWithCascade, deleteLeave } from '../services/leave.js';
+import { listOutbox, retryOutboxRow } from '../services/notifications.js';
 
 export const adminRouter = Router();
 
@@ -113,6 +114,23 @@ adminRouter.delete(
   asyncHandler(async (req, res) => {
     isDateString(req.params.date, 'date');
     const result = await deleteLeave(req.params.id, req.params.date);
+    res.json(result);
+  })
+);
+
+adminRouter.get(
+  '/outbox',
+  asyncHandler(async (req, res) => {
+    const { status, topic, page } = req.query;
+    const result = await listOutbox({ status, topic, page });
+    res.json(result);
+  })
+);
+
+adminRouter.post(
+  '/outbox/:id/retry',
+  asyncHandler(async (req, res) => {
+    const result = await retryOutboxRow(req.params.id);
     res.json(result);
   })
 );

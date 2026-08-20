@@ -1,7 +1,7 @@
 # System Design Write-up
 
 > Deliverable 4 — 800 words max. Drafted incrementally; finalised on day 10.
-> Current draft: ~180 words.
+> Current draft: ~750 words.
 
 ## 1. Double-booking prevention
 
@@ -69,4 +69,21 @@ pinger hitting the same endpoint.
 
 ## 4. Notification failure handling
 
-_To be written on day 6._
+The `outbox` row is written in the *same transaction* as the business change, so a confirmed
+booking can never exist without its pending notification, and a failing SMTP call can't roll it
+back - sending is fully decoupled from the request that caused it.
+
+The worker claims a batch with `FOR UPDATE SKIP LOCKED`, marks it `'processing'`, and commits -
+a short transaction, not one held open across the network call. `SKIP LOCKED` lets overlapping
+ticks claim disjoint rows with zero coordination; `locked_at` stops a second tick re-claiming a
+row an earlier one is still sending, since the row lock itself is gone once phase one commits.
+Only once `locked_at` exceeds ten minutes - a crashed worker - does the row become claimable
+again, through that same query, never a separate "unstick" step.
+
+Backoff is exponential per attempt (~1m, 5m, 15m, 1h, 6h) with jitter, written into
+`next_retry_at` on every failure. At `attempts >= max_attempts` the row becomes `'failed'` - a
+dead letter an admin retries deliberately via `POST /api/admin/outbox/:id/retry`, not something
+the worker keeps hammering.
+
+`runJobs()` runs both on an interval and behind `POST /api/internal/jobs/tick` (shared-secret
+guarded), so a sleeping free-tier instance still delivers once cron wakes it.

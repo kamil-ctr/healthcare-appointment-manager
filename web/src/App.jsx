@@ -9,6 +9,7 @@ import Appointments from './pages/Appointments.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import AdminDoctors from './pages/admin/AdminDoctors.jsx';
+import AdminNotifications from './pages/admin/AdminNotifications.jsx';
 import DoctorQueue from './pages/DoctorQueue.jsx';
 import DoctorAppointmentDetail from './pages/DoctorAppointmentDetail.jsx';
 
@@ -50,6 +51,14 @@ export default function App() {
           element={
             <RequireAuth roles={['patient', 'doctor']}>
               <Appointments />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/notifications"
+          element={
+            <RequireAuth roles={['admin']}>
+              <AdminNotifications />
             </RequireAuth>
           }
         />

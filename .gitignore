@@ -22,6 +22,9 @@ out/
 .vscode/
 .idea/
 .claude/
+
+# tool configuration, not project code (see submission guidelines)
+CLAUDE.md
 *.swp
 .DS_Store
 Thumbs.db

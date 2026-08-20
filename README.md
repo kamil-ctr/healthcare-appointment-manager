@@ -5,11 +5,11 @@ Patients book slots and submit symptoms in advance; an LLM produces a pre-visit 
 urgency level for the doctor and a patient-friendly summary after the visit. Both sides are kept
 informed through email and Google Calendar.
 
-> **Status:** Day 5 of 10 — symptom capture, pre-visit LLM triage summary (urgency +
-> chief complaint + suggested questions), the doctor's urgency-sorted queue, and full
-> LLM failure handling (timeout/auth/malformed-output/rate-limit, all with graceful
-> degradation - booking never depends on the model). See [Roadmap](#roadmap) for what
-> lands next.
+> **Status:** Day 6 of 10 — the outbox worker (`FOR UPDATE SKIP LOCKED` claim,
+> exponential backoff, dead-lettering, stale-lock reclaim), Nodemailer email delivery
+> with a console-transport fallback, appointment reminders (24h/2h before, cancelled
+> alongside their appointment), and an admin notifications page. See
+> [Roadmap](#roadmap) for what lands next.
 
 ---
 
@@ -82,24 +82,30 @@ healthcare-appointment-manager/
 │       │   ├── prompts.js    # versioned prompts, injection-guard sanitisation
 │       │   ├── parse.js      # strict output validation
 │       │   └── pre-visit.js  # orchestrates call -> validate -> one repair -> give up
+│       ├── mail/
+│       │   ├── transport.js  # one shared nodemailer transport, console fallback
+│       │   └── templates.js  # plain-literal email templates, doctor-timezone rendering
 │       ├── middleware/
 │       │   ├── core.js
 │       │   └── auth.js       # requireAuth, requireRole(...)
 │       ├── services/
 │       │   ├── doctors.js    # doctor CRUD, availability
 │       │   ├── leave.js      # leave + appointment-cancellation cascade
-│       │   ├── appointments.js
+│       │   ├── appointments.js  # hold/confirm/cancel/reschedule + reminder scheduling
 │       │   ├── slots.js
 │       │   ├── symptoms.js   # symptom form submission, pre-visit summary get/retry
-│       │   └── queue.js      # doctor's urgency-sorted daily queue
+│       │   ├── queue.js      # doctor's urgency-sorted daily queue
+│       │   └── notifications.js  # admin outbox listing + dead-letter retry
 │       ├── jobs/
 │       │   ├── runner.js
 │       │   ├── expire-holds.js
-│       │   └── ai-summaries.js  # generatePendingSummaries(), one attempt per row per tick
+│       │   ├── ai-summaries.js  # generatePendingSummaries(), one attempt per row per tick
+│       │   ├── reminders.js     # queueDueReminders(): reminders -> outbox
+│       │   └── outbox.js        # the delivery worker: claim, send, backoff, dead-letter
 │       └── routes/
 │           ├── health.js
 │           ├── auth.js
-│           ├── admin.js      # admin-only: doctors, availability, leave
+│           ├── admin.js      # admin-only: doctors, availability, leave, outbox
 │           ├── doctors.js    # read-only, any authenticated role
 │           ├── appointments.js
 │           ├── doctor.js     # GET /api/doctor/queue
@@ -151,6 +157,25 @@ Expected output: `[migrate] done. 13 tables present: ...`
 Set `LLM_API_KEY` to a [Groq](https://console.groq.com) API key to enable the pre-visit
 summary (Day 5) - a blank key degrades gracefully (booking still works; the doctor sees the
 raw symptom form with a "Summary unavailable" retry button instead of a generated summary).
+
+**SMTP (Day 6, optional).** Leave `SMTP_USER` blank and the app runs fully without any email
+setup: `server/src/mail/transport.js` falls back to a console transport that logs each
+rendered email to the server output and reports it as delivered, so the entire outbox flow -
+confirm a booking, run the worker, watch the row land on `'sent'` - works end to end on a
+fresh clone with zero configuration. To send real email with a Gmail account:
+
+1. Turn on 2-Step Verification on the Google account.
+2. Create an [App Password](https://myaccount.google.com/apppasswords) (Mail, any device name).
+3. Set in `server/.env`:
+   ```
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=587
+   SMTP_USER=you@gmail.com
+   SMTP_PASS=<the 16-character app password, no spaces>
+   MAIL_FROM=Clinic <you@gmail.com>
+   ```
+
+Any other SMTP provider works the same way - just set `SMTP_HOST`/`SMTP_PORT` accordingly.
 
 ### 4. Configure the frontend
 
@@ -227,11 +252,17 @@ index, a freed slot becomes bookable again immediately.
 
 Email and calendar rows are inserted in the *same transaction* as the business change. A confirmed
 booking can never exist without its pending notification, and a failed SMTP or Google call can
-never roll back a booking. A worker claims due rows with `FOR UPDATE SKIP LOCKED` and retries with
-exponential backoff up to `max_attempts`.
+never roll back a booking. A worker claims due rows with `FOR UPDATE SKIP LOCKED`, marks them
+`'processing'`, and retries failures with exponential backoff (~1m, 5m, 15m, 1h, 6h, with jitter)
+up to `max_attempts`, after which a row becomes a `'failed'` dead letter an admin retries
+deliberately (`/admin/notifications`) rather than something the worker keeps hammering on its
+own. `email`-topic rows go through Nodemailer today; `calendar`-topic rows are left untouched
+for Day 7. Full write-up: `docs/system-design.md` §4.
 
 `reminders` holds the *schedule* (what is due, when); `outbox` holds the *delivery* (how it is
-sent, with retries). The background job moves work from one to the other.
+sent, with retries). The background job moves work from one to the other - confirming an
+appointment schedules a 24h and a 2h reminder for the patient; cancelling, rescheduling, or a
+leave cascade cancels any of those still `'scheduled'`, so a cancelled appointment never reminds.
 
 **3. Google OAuth credentials live in `google_accounts`, never on `users`.**
 
@@ -264,7 +295,7 @@ the doctor, never a crash or a blocked booking.
 | 3 | Admin portal: doctor CRUD, availability, leave days | ✅ done |
 | 4 | Slot generation, hold/confirm flow, **concurrency test** | ✅ done |
 | 5 | Symptom form, pre-visit LLM summary, doctor queue | ✅ done |
-| 6 | Outbox worker, Nodemailer, booking/cancellation emails | |
+| 6 | Outbox worker, Nodemailer, booking/cancellation emails | ✅ done |
 | 7 | Google Calendar OAuth, create/update/delete events | |
 | 8 | Post-visit notes, prescriptions, medication reminders | |
 | 9 | Deployment + integration testing | |

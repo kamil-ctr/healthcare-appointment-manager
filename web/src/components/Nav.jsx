@@ -31,9 +31,14 @@ export default function Nav() {
             </Link>
           )}
           {auth?.user.role === 'admin' && (
-            <Link to="/admin" className="text-ink hover:text-primary">
-              Admin
-            </Link>
+            <>
+              <Link to="/admin" className="text-ink hover:text-primary">
+                Admin
+              </Link>
+              <Link to="/admin/notifications" className="text-ink hover:text-primary">
+                Notifications
+              </Link>
+            </>
           )}
           {auth ? (
             <>

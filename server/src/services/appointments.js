@@ -107,6 +107,33 @@ export async function holdAppointment(doctorId, patientId, startsAt) {
   }
 }
 
+/**
+ * 24h-before and 2h-before reminders for the patient. Skips any whose
+ * due_at already passed - a slot booked for tomorrow morning must not fire
+ * a 24-hour reminder immediately.
+ */
+async function scheduleAppointmentReminders(client, appointmentId, patientId, startsAt) {
+  await client.query(
+    `INSERT INTO reminders (appointment_id, recipient_id, kind, due_at, status)
+     SELECT $1, $2, 'appointment_reminder', due_at, 'scheduled'
+       FROM (VALUES
+         ($3::timestamptz - interval '24 hours'),
+         ($3::timestamptz - interval '2 hours')
+       ) AS t(due_at)
+      WHERE due_at > now()`,
+    [appointmentId, patientId, startsAt]
+  );
+}
+
+/** A cancelled appointment must never send a reminder - only 'scheduled' rows are touched;
+ * one already 'queued'/'sent' has left the schedule and become the outbox's problem. */
+async function cancelScheduledReminders(client, appointmentId) {
+  await client.query(
+    `UPDATE reminders SET status = 'cancelled' WHERE appointment_id = $1 AND status = 'scheduled'`,
+    [appointmentId]
+  );
+}
+
 async function fetchParticipants(client, appointmentId) {
   const { rows } = await client.query(
     `SELECT a.id, a.doctor_id AS "doctorId", a.patient_id AS "patientId",
@@ -153,6 +180,8 @@ export async function confirmAppointment(appointmentId, patientId) {
 
     const p = await fetchParticipants(client, appointmentId);
     const slot = { startsAt: p.startsAt, endsAt: p.endsAt };
+
+    await scheduleAppointmentReminders(client, appointmentId, p.patientId, p.startsAt);
 
     for (const [recipientId, recipientName] of [
       [p.patientId, p.patientName],
@@ -206,6 +235,8 @@ export async function cancelAppointment(appointmentId, userId, role, reason) {
       newStatus,
       reason ?? null,
     ]);
+
+    await cancelScheduledReminders(client, appointmentId);
 
     const p = await fetchParticipants(client, appointmentId);
     const slot = { startsAt: p.startsAt, endsAt: p.endsAt };
@@ -287,6 +318,8 @@ export async function rescheduleAppointment(appointmentId, patientId, newStartsA
           WHERE id = $1`,
         [appointmentId]
       );
+
+      await cancelScheduledReminders(client, appointmentId);
 
       const { rows: events } = await client.query(
         `SELECT user_id, google_event_id, calendar_id

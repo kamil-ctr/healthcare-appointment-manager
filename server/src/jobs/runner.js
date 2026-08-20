@@ -9,6 +9,8 @@ import { timingSafeEqual } from 'node:crypto';
 import { config } from '../config.js';
 import { expireHolds } from './expire-holds.js';
 import { generatePendingSummaries } from './ai-summaries.js';
+import { queueDueReminders } from './reminders.js';
+import { processOutboxBatch } from './outbox.js';
 
 let intervalHandle;
 
@@ -28,12 +30,25 @@ export function stopJobRunner() {
 export async function runJobs() {
   const { expired } = await expireHolds();
   const { processed, ready, failed } = await generatePendingSummaries();
-  // Day 6: const { sent, failed } = await processOutboxBatch();
+  // Reminders are queued before the outbox worker runs, so a reminder that
+  // just came due can be delivered in the same tick it's queued in.
+  const { queued: remindersQueued } = await queueDueReminders();
+  const {
+    claimed: outboxClaimed,
+    sent: outboxSent,
+    retried: outboxRetried,
+    failed: outboxFailed,
+  } = await processOutboxBatch();
   return {
     expiredHolds: expired,
     summariesProcessed: processed,
     summariesReady: ready,
     summariesFailed: failed,
+    remindersQueued,
+    outboxClaimed,
+    outboxSent,
+    outboxRetried,
+    outboxFailed,
   };
 }
 

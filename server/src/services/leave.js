@@ -58,6 +58,13 @@ export async function createLeaveWithCascade(doctorId, { date, reason, createdBy
       [appointmentIds, reason ?? 'Doctor on leave']
     );
 
+    // A cancelled appointment must never send a reminder.
+    await client.query(
+      `UPDATE reminders SET status = 'cancelled'
+        WHERE appointment_id = ANY($1::uuid[]) AND status = 'scheduled'`,
+      [appointmentIds]
+    );
+
     let notificationsQueued = 0;
 
     for (const appt of appointments) {
