@@ -47,11 +47,11 @@ export default function DoctorProfile() {
 
       {doctor.bio && <p className="mt-6 max-w-2xl text-ink/80">{doctor.bio}</p>}
 
-      <section className="mt-8 rounded-[var(--radius-card)] border border-line bg-surface p-5">
+      <section className="mt-8 rounded-[var(--radius-card)] border border-ink/12 bg-panel p-5">
         <h2 className="mb-3 text-lg">Weekly availability</h2>
         <ul className="flex flex-col gap-1 text-sm">
           {WEEKDAYS.map((label, weekday) => (
-            <li key={weekday} className="flex justify-between border-b border-line py-1.5 last:border-0">
+            <li key={weekday} className="flex justify-between border-b border-ink/12 py-1.5 last:border-0">
               <span className="text-ink/70">{label}</span>
               <span className="font-data">
                 {byWeekday[weekday].length === 0
@@ -65,7 +65,7 @@ export default function DoctorProfile() {
 
       <Link
         to={`/book/${doctor.id}`}
-        className="mt-8 inline-block rounded-[var(--radius-card)] bg-primary px-6 py-3 text-white transition-colors hover:bg-primary/90"
+        className="mt-8 inline-block rounded-[var(--radius-card)] bg-signal px-6 py-3 text-ground transition-colors hover:bg-signal/90"
       >
         Book an appointment
       </Link>

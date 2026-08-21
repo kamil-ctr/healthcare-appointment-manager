@@ -4,12 +4,12 @@ const VARIANT_CLASS = {
   row: 'h-9 rounded-[var(--radius-pill)]',
 };
 
-/** Pulse placeholder in the surface/line palette - stands in for any bare "Loading..." text. */
+/** Pulse placeholder in the panel/ink palette - stands in for any bare "Loading..." text. */
 export default function Skeleton({ variant = 'line', className = '' }) {
   return (
     <span
       aria-hidden="true"
-      className={`block w-full animate-pulse bg-line/50 ${VARIANT_CLASS[variant] || VARIANT_CLASS.line} ${className}`}
+      className={`block w-full animate-pulse bg-ink/10 ${VARIANT_CLASS[variant] || VARIANT_CLASS.line} ${className}`}
     />
   );
 }

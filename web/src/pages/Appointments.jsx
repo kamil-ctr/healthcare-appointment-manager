@@ -154,7 +154,7 @@ export default function Appointments() {
     return (
       <li
         key={a.id}
-        className="rounded-[var(--radius-card)] border border-line bg-surface p-4 transition-colors has-[a:hover]:border-primary"
+        className="rounded-[var(--radius-card)] border border-ink/12 bg-panel p-4 transition-colors has-[a:hover]:border-signal"
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Link to={`/appointments/${a.id}`} className="hover:underline">
@@ -172,7 +172,7 @@ export default function Appointments() {
               <button
                 type="button"
                 onClick={() => (isRescheduling ? setReschedulingId(null) : startReschedule(a))}
-                className="rounded-[var(--radius-pill)] border border-line px-3 py-1.5 text-sm hover:border-primary hover:text-primary"
+                className="rounded-[var(--radius-pill)] border border-ink/12 px-3 py-1.5 text-sm hover:border-signal hover:text-signal"
               >
                 {isRescheduling ? 'Close' : 'Reschedule'}
               </button>
@@ -188,7 +188,7 @@ export default function Appointments() {
         </div>
 
         {isRescheduling && !rescheduleHold && (
-          <div className="mt-4 border-t border-line pt-4">
+          <div className="mt-4 border-t border-ink/12 pt-4">
             <p className="mb-2 text-sm text-ink/60">Pick a new time:</p>
             {Object.entries(rescheduleSlots).map(([date, slots]) => (
               <div key={date} className="mb-3">
@@ -200,7 +200,7 @@ export default function Appointments() {
         )}
 
         {isRescheduling && rescheduleHold && (
-          <div className="mt-4 rounded-[var(--radius-card)] border border-primary bg-primary-50 p-4">
+          <div className="mt-4 rounded-[var(--radius-card)] border border-signal bg-signal/10 p-4">
             <p className="font-data text-sm">{formatDateTime(rescheduleHold.startsAt)}</p>
             <p className="mt-1">
               <HoldCountdown
@@ -214,7 +214,7 @@ export default function Appointments() {
             <button
               type="button"
               onClick={confirmReschedule}
-              className="mt-3 rounded-[var(--radius-card)] bg-primary px-4 py-2 text-sm text-white hover:bg-primary/90"
+              className="mt-3 rounded-[var(--radius-card)] bg-signal px-4 py-2 text-sm text-ground hover:bg-signal/90"
             >
               Confirm new time
             </button>

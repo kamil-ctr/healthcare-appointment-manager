@@ -69,7 +69,7 @@ export default function DoctorQueue() {
         onChange={(e) => {
           if (e.target.value) setDate(e.target.value);
         }}
-        className="mb-6 rounded-[var(--radius-card)] border border-line bg-surface px-3 py-2 font-data text-sm"
+        className="mb-6 rounded-[var(--radius-card)] border border-ink/12 bg-panel px-3 py-2 font-data text-sm"
       />
 
       {state.status === 'loading' && (
@@ -89,7 +89,7 @@ export default function DoctorQueue() {
             <li key={item.appointmentId}>
               <Link
                 to={`/doctor/appointments/${item.appointmentId}`}
-                className="flex items-center justify-between gap-3 rounded-[var(--radius-card)] border border-line bg-surface p-4 transition-colors hover:border-primary"
+                className="flex items-center justify-between gap-3 rounded-[var(--radius-card)] border border-ink/12 bg-panel p-4 transition-colors hover:border-signal"
               >
                 <div className="flex items-center gap-3">
                   <UrgencyBadge urgency={item.urgency} />

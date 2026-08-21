@@ -20,7 +20,7 @@ function formatDateTime(iso) {
   });
 }
 
-const select = 'rounded-[var(--radius-card)] border border-line px-3 py-2 text-sm focus:border-primary';
+const select = 'rounded-[var(--radius-card)] border border-ink/12 px-3 py-2 text-sm focus:border-signal';
 
 export default function AdminNotifications() {
   const { call } = useAuth();
@@ -109,10 +109,10 @@ export default function AdminNotifications() {
 
       {state.status === 'ok' && (
         <>
-          <div className="overflow-x-auto rounded-[var(--radius-card)] border border-line bg-surface">
+          <div className="overflow-x-auto rounded-[var(--radius-card)] border border-ink/12 bg-panel">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-line text-ink/60">
+                <tr className="border-b border-ink/12 text-ink/60">
                   <th className="px-4 py-2 font-medium">Topic</th>
                   <th className="px-4 py-2 font-medium">Event</th>
                   <th className="px-4 py-2 font-medium">Status</th>
@@ -124,7 +124,7 @@ export default function AdminNotifications() {
               </thead>
               <tbody>
                 {state.rows.map((row) => (
-                  <tr key={row.id} className="border-b border-line last:border-0 align-top">
+                  <tr key={row.id} className="border-b border-ink/12 last:border-0 align-top">
                     <td className="px-4 py-2 font-data">{row.topic}</td>
                     <td className="px-4 py-2">{row.eventType}</td>
                     <td className="px-4 py-2">
@@ -145,7 +145,7 @@ export default function AdminNotifications() {
                           type="button"
                           onClick={() => handleRetry(row.id)}
                           disabled={retryingId === row.id}
-                          className="rounded-[var(--radius-pill)] border border-primary px-3 py-1.5 text-sm text-primary transition-colors hover:bg-primary-50 disabled:opacity-60"
+                          className="rounded-[var(--radius-pill)] border border-signal px-3 py-1.5 text-sm text-signal transition-colors hover:bg-signal/10 disabled:opacity-60"
                         >
                           {retryingId === row.id ? 'Retrying...' : 'Retry'}
                         </button>
@@ -173,7 +173,7 @@ export default function AdminNotifications() {
                 type="button"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
-                className="rounded-[var(--radius-pill)] border border-line px-3 py-1.5 hover:border-primary hover:text-primary disabled:opacity-40"
+                className="rounded-[var(--radius-pill)] border border-ink/12 px-3 py-1.5 hover:border-signal hover:text-signal disabled:opacity-40"
               >
                 Previous
               </button>
@@ -181,7 +181,7 @@ export default function AdminNotifications() {
                 type="button"
                 onClick={() => setPage((p) => p + 1)}
                 disabled={page * state.pageSize >= state.total}
-                className="rounded-[var(--radius-pill)] border border-line px-3 py-1.5 hover:border-primary hover:text-primary disabled:opacity-40"
+                className="rounded-[var(--radius-pill)] border border-ink/12 px-3 py-1.5 hover:border-signal hover:text-signal disabled:opacity-40"
               >
                 Next
               </button>

@@ -68,11 +68,11 @@ export default function AppointmentTimeline({ appointmentId }) {
   if (state.events.length === 0) return <p className="text-sm text-ink/60">No events yet.</p>;
 
   return (
-    <ol className="flex flex-col gap-4 border-l border-line pl-4">
+    <ol className="flex flex-col gap-4 border-l border-ink/12 pl-4">
       {state.events.map((ev, i) => (
         <li key={i} className="relative">
           <span
-            className="absolute -left-[21px] top-1 h-2 w-2 rounded-[var(--radius-pill)] bg-primary"
+            className="absolute -left-[21px] top-1 h-2 w-2 rounded-[var(--radius-pill)] bg-signal"
             aria-hidden="true"
           />
           <p className="font-data text-xs text-ink/50">

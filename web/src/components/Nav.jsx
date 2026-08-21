@@ -11,31 +11,31 @@ export default function Nav() {
   }
 
   return (
-    <header className="border-b border-line bg-surface">
+    <header className="sticky top-0 z-40 border-b border-ink/12 bg-panel/60 backdrop-blur-md">
       <nav className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
         <Link to="/" className="font-display text-lg font-bold text-ink">
           Clinic
         </Link>
         <div className="flex items-center gap-5 text-sm">
-          <Link to="/doctors" className="text-ink hover:text-primary">
+          <Link to="/doctors" className="text-ink hover:text-signal">
             Find a doctor
           </Link>
           {auth?.user.role === 'patient' && (
-            <Link to="/appointments" className="text-ink hover:text-primary">
+            <Link to="/appointments" className="text-ink hover:text-signal">
               My appointments
             </Link>
           )}
           {auth?.user.role === 'doctor' && (
-            <Link to="/doctor" className="text-ink hover:text-primary">
+            <Link to="/doctor" className="text-ink hover:text-signal">
               My queue
             </Link>
           )}
           {auth?.user.role === 'admin' && (
             <>
-              <Link to="/admin" className="text-ink hover:text-primary">
+              <Link to="/admin" className="text-ink hover:text-signal">
                 Admin
               </Link>
-              <Link to="/admin/notifications" className="text-ink hover:text-primary">
+              <Link to="/admin/notifications" className="text-ink hover:text-signal">
                 Notifications
               </Link>
             </>
@@ -46,19 +46,19 @@ export default function Nav() {
               <button
                 type="button"
                 onClick={handleLogout}
-                className="rounded-[var(--radius-pill)] border border-line px-3 py-1.5 hover:border-primary hover:text-primary"
+                className="rounded-[var(--radius-pill)] border border-ink/12 px-3 py-1.5 hover:border-signal hover:text-signal"
               >
                 Sign out
               </button>
             </>
           ) : (
             <>
-              <Link to="/login" className="text-ink hover:text-primary">
+              <Link to="/login" className="text-ink hover:text-signal">
                 Sign in
               </Link>
               <Link
                 to="/register"
-                className="rounded-[var(--radius-pill)] bg-primary px-3 py-1.5 text-white hover:bg-primary/90"
+                className="rounded-[var(--radius-pill)] bg-signal px-3 py-1.5 text-ground hover:bg-signal/90"
               >
                 Register
               </Link>

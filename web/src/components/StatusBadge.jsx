@@ -1,5 +1,5 @@
 const TONE_COLOR = {
-  primary: 'bg-primary',
+  primary: 'bg-signal',
   caution: 'bg-caution',
   urgent: 'bg-urgent',
   neutral: 'bg-ink/30',

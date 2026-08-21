@@ -48,7 +48,7 @@ export default function Login() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="rounded-[var(--radius-card)] border border-line px-3 py-2 focus:border-primary"
+            className="rounded-[var(--radius-card)] border border-ink/12 px-3 py-2 focus:border-signal"
           />
         </Field>
         <Field label="Password" name="password" error={error}>
@@ -57,7 +57,7 @@ export default function Login() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="rounded-[var(--radius-card)] border border-line px-3 py-2 focus:border-primary"
+            className="rounded-[var(--radius-card)] border border-ink/12 px-3 py-2 focus:border-signal"
           />
         </Field>
 
@@ -66,7 +66,7 @@ export default function Login() {
         <button
           type="submit"
           disabled={busy}
-          className="rounded-[var(--radius-card)] bg-primary px-4 py-2 text-white transition-colors hover:bg-primary/90 disabled:opacity-60"
+          className="rounded-[var(--radius-card)] bg-signal px-4 py-2 text-ground transition-colors hover:bg-signal/90 disabled:opacity-60"
         >
           {busy ? 'Signing in...' : 'Sign in'}
         </button>
@@ -74,7 +74,7 @@ export default function Login() {
 
       <p className="mt-6 text-sm text-ink/60">
         New here?{' '}
-        <Link to="/register" className="text-primary underline">
+        <Link to="/register" className="text-signal underline">
           Create a patient account
         </Link>
       </p>

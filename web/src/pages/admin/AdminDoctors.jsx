@@ -5,11 +5,11 @@ import StatusBadge from '../../components/StatusBadge.jsx';
 import Skeleton from '../../components/Skeleton.jsx';
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const input = 'rounded-[var(--radius-card)] border border-line px-3 py-2 text-sm focus:border-primary';
+const input = 'rounded-[var(--radius-card)] border border-ink/12 px-3 py-2 text-sm focus:border-signal';
 const label = 'flex flex-col gap-1 text-sm';
-const linkBtn = 'text-sm text-primary underline hover:no-underline';
+const linkBtn = 'text-sm text-signal underline hover:no-underline';
 const primaryBtn =
-  'rounded-[var(--radius-card)] bg-primary px-4 py-2 text-sm text-white transition-colors hover:bg-primary/90 disabled:opacity-60';
+  'rounded-[var(--radius-card)] bg-signal px-4 py-2 text-sm text-ground transition-colors hover:bg-signal/90 disabled:opacity-60';
 
 export default function AdminDoctors() {
   const [view, setView] = useState({ name: 'list' });
@@ -57,7 +57,7 @@ function DoctorsList({ onCreate, onSelect }) {
             type="checkbox"
             checked={includeInactive}
             onChange={(e) => setIncludeInactive(e.target.checked)}
-            className="accent-primary"
+            className="accent-signal"
           />
           Show deactivated
         </label>
@@ -75,10 +75,10 @@ function DoctorsList({ onCreate, onSelect }) {
       )}
       {state.status === 'error' && <p className="text-sm text-urgent">{state.message}</p>}
       {state.status === 'ok' && (
-        <div className="overflow-x-auto rounded-[var(--radius-card)] border border-line bg-surface">
+        <div className="overflow-x-auto rounded-[var(--radius-card)] border border-ink/12 bg-panel">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-line text-ink/60">
+              <tr className="border-b border-ink/12 text-ink/60">
                 <th className="px-4 py-2 font-medium">Name</th>
                 <th className="px-4 py-2 font-medium">Specialisation</th>
                 <th className="px-4 py-2 font-medium">Email</th>
@@ -88,7 +88,7 @@ function DoctorsList({ onCreate, onSelect }) {
             </thead>
             <tbody>
               {state.doctors.map((d) => (
-                <tr key={d.id} className="border-b border-line last:border-0">
+                <tr key={d.id} className="border-b border-ink/12 last:border-0">
                   <td className="px-4 py-2">{d.fullName}</td>
                   <td className="px-4 py-2">{d.specialisation}</td>
                   <td className="px-4 py-2">{d.email}</td>
@@ -303,7 +303,7 @@ function DoctorDetail({ doctorId, onBack }) {
               type="button"
               onClick={() => setConfirmingDeactivate(false)}
               disabled={deactivating}
-              className="rounded-[var(--radius-pill)] border border-line px-3 py-1.5 text-sm hover:border-primary hover:text-primary disabled:opacity-60"
+              className="rounded-[var(--radius-pill)] border border-ink/12 px-3 py-1.5 text-sm hover:border-signal hover:text-signal disabled:opacity-60"
             >
               Cancel
             </button>
@@ -380,10 +380,10 @@ function AvailabilityEditor({ doctorId, availability, onSaved }) {
   }
 
   return (
-    <div className="mt-6 rounded-[var(--radius-card)] border border-line bg-surface p-5">
+    <div className="mt-6 rounded-[var(--radius-card)] border border-ink/12 bg-panel p-5">
       <h3 className="mb-3 text-base">Weekly availability</h3>
       {WEEKDAYS.map((wLabel, weekday) => (
-        <div className="flex gap-4 border-b border-line py-2 last:border-0" key={weekday}>
+        <div className="flex gap-4 border-b border-ink/12 py-2 last:border-0" key={weekday}>
           <span className="w-24 shrink-0 pt-1.5 text-sm text-ink/70">{wLabel}</span>
           <div className="flex flex-col gap-1.5">
             {byWeekday[weekday].map((block, index) => (
@@ -455,7 +455,7 @@ function LeaveForm({ doctorId, upcomingLeave, onSaved }) {
   }
 
   return (
-    <div className="mt-6 rounded-[var(--radius-card)] border border-line bg-surface p-5">
+    <div className="mt-6 rounded-[var(--radius-card)] border border-ink/12 bg-panel p-5">
       <h3 className="mb-3 text-base">Mark a leave day</h3>
       <form className="mb-3 flex flex-wrap items-end gap-3" onSubmit={handleSubmit}>
         <label className={`${label} flex-1`}>
@@ -472,7 +472,7 @@ function LeaveForm({ doctorId, upcomingLeave, onSaved }) {
       </form>
       {error && <p className="text-sm text-urgent">{error}</p>}
       {result && (
-        <p className="text-sm text-primary">
+        <p className="text-sm text-signal">
           This cancelled {result.affectedAppointments} appointment(s) and queued{' '}
           {result.notificationsQueued} notification(s).
         </p>

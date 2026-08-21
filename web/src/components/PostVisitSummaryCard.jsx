@@ -20,7 +20,7 @@ function PrescriptionTable({ prescriptions }) {
         </thead>
         <tbody>
           {prescriptions.map((p) => (
-            <tr key={p.id ?? p.medicationName} className="border-t border-line">
+            <tr key={p.id ?? p.medicationName} className="border-t border-ink/12">
               <td className="py-1.5 pr-3 font-medium">{p.medicationName}</td>
               <td className="py-1.5 pr-3 font-data">{p.dosage}</td>
               <td className="py-1.5 pr-3 font-data">{p.frequencyPerDay}x/day</td>
@@ -92,7 +92,7 @@ export default function PostVisitSummaryCard({ appointmentId, canRetry }) {
 
   if (state.status === 'loading') {
     return (
-      <div className="rounded-[var(--radius-card)] border border-line bg-surface p-4">
+      <div className="rounded-[var(--radius-card)] border border-ink/12 bg-panel p-4">
         <Skeleton variant="line" className="mb-3 w-1/3" />
         <Skeleton variant="card" />
       </div>
@@ -109,7 +109,7 @@ export default function PostVisitSummaryCard({ appointmentId, canRetry }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="rounded-[var(--radius-card)] border border-line bg-surface p-4">
+      <div className="rounded-[var(--radius-card)] border border-ink/12 bg-panel p-4">
         <h3 className="mb-3 font-medium">Visit summary</h3>
 
         {data.status === 'ready' && (
@@ -131,7 +131,7 @@ export default function PostVisitSummaryCard({ appointmentId, canRetry }) {
                     </thead>
                     <tbody>
                       {data.content.medicationSchedule.map((m, i) => (
-                        <tr key={i} className="border-t border-line">
+                        <tr key={i} className="border-t border-ink/12">
                           <td className="py-1.5 pr-3 font-medium">{m.medication}</td>
                           <td className="py-1.5 pr-3 font-data">{m.dose}</td>
                           <td className="py-1.5 pr-3 font-data">{m.when}</td>
@@ -183,7 +183,7 @@ export default function PostVisitSummaryCard({ appointmentId, canRetry }) {
                 type="button"
                 onClick={handleRetry}
                 disabled={retrying}
-                className="mt-2 rounded-[var(--radius-pill)] border border-primary px-3 py-1.5 text-sm text-primary transition-colors hover:bg-primary-50 disabled:opacity-60"
+                className="mt-2 rounded-[var(--radius-pill)] border border-signal px-3 py-1.5 text-sm text-signal transition-colors hover:bg-signal/10 disabled:opacity-60"
               >
                 {retrying ? 'Retrying...' : 'Generate again'}
               </button>
@@ -194,14 +194,14 @@ export default function PostVisitSummaryCard({ appointmentId, canRetry }) {
         )}
 
         {data.status !== 'ready' && data.visitNotes && (
-          <div className="mt-4 border-t border-line pt-4">
+          <div className="mt-4 border-t border-ink/12 pt-4">
             <p className="mb-1 text-xs font-medium uppercase tracking-wide text-ink/50">Clinical notes (raw)</p>
             <VisitNotesReadout visitNotes={data.visitNotes} />
           </div>
         )}
       </div>
 
-      <div className="rounded-[var(--radius-card)] border border-line bg-surface p-4">
+      <div className="rounded-[var(--radius-card)] border border-ink/12 bg-panel p-4">
         <h3 className="mb-3 font-medium">Prescription</h3>
         <PrescriptionTable prescriptions={data.prescriptions} />
         <p className="mt-3 text-xs text-ink/50">This prescription list is the authoritative record from your doctor.</p>

@@ -15,26 +15,48 @@ const SPECIALITIES = [
   'Psychiatry',
 ];
 
-/** Abstract schedule-grid mark instead of a stock photo - keeps the hero on-brand with zero licensing risk. */
-function ScheduleMark() {
+const DEMO_DAYS = ['MON', 'TUE', 'WED', 'THU'];
+const DEMO_TIMES = ['09:00', '09:20', '09:40', '10:00', '10:20', '10:40'];
+const DEMO_TAKEN = 2;
+const DEMO_SELECTED = 4;
+
+/** The hero shows the product, not a stock illustration - the same slot-rail language
+    (glow on available, flat-strike on taken) real booking uses, one tick behind live. */
+function HeroSlotDemo() {
   return (
-    <svg viewBox="0 0 320 240" className="h-full w-full" aria-hidden="true">
-      <rect x="0" y="0" width="320" height="240" rx="6" fill="var(--color-primary-50)" />
-      {[0, 1, 2, 3].map((row) =>
-        [0, 1, 2].map((col) => (
-          <rect
-            key={`${row}-${col}`}
-            x={24 + col * 96}
-            y={24 + row * 54}
-            width={row === col % 4 ? 72 : 60}
-            height="28"
-            rx="4"
-            fill={row === 1 && col === 1 ? 'var(--color-primary)' : 'var(--color-surface)'}
-            stroke="var(--color-line)"
-          />
-        ))
-      )}
-    </svg>
+    <div className="rounded-[var(--radius-card)] border border-ink/10 bg-panel/60 p-5 backdrop-blur-md">
+      <div className="mb-4 flex gap-2 font-data text-xs uppercase tracking-wide text-ink/50">
+        {DEMO_DAYS.map((d, i) => (
+          <span
+            key={d}
+            className={
+              i === 1
+                ? 'rounded-[var(--radius-pill)] bg-signal px-2 py-0.5 text-ground'
+                : 'px-2 py-0.5'
+            }
+          >
+            {d}
+          </span>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {DEMO_TIMES.map((t, i) => (
+          <span
+            key={t}
+            style={{ animation: 'rail-in 260ms ease-out backwards', animationDelay: `${i * 45}ms` }}
+            className={
+              i === DEMO_TAKEN
+                ? 'rounded-[var(--radius-pill)] border border-ink/10 bg-ink/5 px-3 py-2 font-data text-sm text-ink/35 line-through'
+                : i === DEMO_SELECTED
+                  ? 'rounded-[var(--radius-pill)] border border-signal bg-signal px-3 py-2 font-data text-sm text-ground shadow-[0_0_0_1px_var(--color-signal),0_0_18px_-4px_var(--color-signal)]'
+                  : 'rounded-[var(--radius-pill)] border border-signal/50 px-3 py-2 font-data text-sm text-signal shadow-[0_0_10px_-5px_var(--color-signal)]'
+            }
+          >
+            {t}
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -82,17 +104,15 @@ export default function Home() {
           <p className="mt-4 max-w-md text-ink/70">{hero.body}</p>
           <Link
             to={hero.ctaTo}
-            className="mt-6 inline-block rounded-[var(--radius-card)] bg-primary px-5 py-2.5 text-white transition-colors hover:bg-primary/90"
+            className="mt-6 inline-block rounded-[var(--radius-card)] bg-signal px-5 py-2.5 text-ground transition-colors hover:bg-signal/90"
           >
             {hero.ctaLabel}
           </Link>
         </div>
-        <div className="aspect-[4/3] w-full">
-          <ScheduleMark />
-        </div>
+        <HeroSlotDemo />
       </section>
 
-      <section className="border-y border-line bg-surface py-10">
+      <section className="border-y border-ink/12 bg-panel py-10">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <h2 className="mb-4 text-lg">Browse by speciality</h2>
           <div className="flex gap-3 overflow-x-auto pb-2">
@@ -100,7 +120,7 @@ export default function Home() {
               <Link
                 key={s}
                 to={`/doctors?specialisation=${encodeURIComponent(s)}`}
-                className="shrink-0 rounded-[var(--radius-pill)] border border-line px-4 py-2 text-sm transition-colors hover:border-primary hover:text-primary"
+                className="shrink-0 rounded-[var(--radius-pill)] border border-ink/12 px-4 py-2 text-sm transition-colors hover:border-signal hover:text-signal"
               >
                 {s}
               </Link>
@@ -113,7 +133,7 @@ export default function Home() {
         <h2 className="mb-4 text-lg">Available doctors</h2>
         {!auth && (
           <p className="text-sm text-ink/60">
-            <Link to="/login" className="text-primary underline">
+            <Link to="/login" className="text-signal underline">
               Sign in
             </Link>{' '}
             to browse available doctors.
@@ -134,7 +154,7 @@ export default function Home() {
               <Link
                 key={d.id}
                 to={`/doctors/${d.id}`}
-                className="flex flex-col items-center gap-2 rounded-[var(--radius-card)] border border-line bg-surface p-4 text-center transition-colors hover:border-primary"
+                className="flex flex-col items-center gap-2 rounded-[var(--radius-card)] border border-ink/12 bg-panel p-4 text-center transition-colors hover:border-signal"
               >
                 <Avatar name={d.fullName} />
                 <span className="text-sm font-medium">{d.fullName}</span>

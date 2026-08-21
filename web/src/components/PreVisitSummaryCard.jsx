@@ -68,7 +68,7 @@ export default function PreVisitSummaryCard({ appointmentId, canRetry }) {
 
   if (state.status === 'loading') {
     return (
-      <div className="rounded-[var(--radius-card)] border border-line bg-surface p-4">
+      <div className="rounded-[var(--radius-card)] border border-ink/12 bg-panel p-4">
         <Skeleton variant="line" className="mb-3 w-1/3" />
         <Skeleton variant="card" />
       </div>
@@ -86,7 +86,7 @@ export default function PreVisitSummaryCard({ appointmentId, canRetry }) {
 
   if (data.status === 'ready') {
     return (
-      <div className="rounded-[var(--radius-card)] border border-line bg-surface p-4">
+      <div className="rounded-[var(--radius-card)] border border-ink/12 bg-panel p-4">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="font-medium">Pre-visit summary</h3>
           <UrgencyBadge urgency={data.urgency} />
@@ -111,7 +111,7 @@ export default function PreVisitSummaryCard({ appointmentId, canRetry }) {
   }
 
   return (
-    <div className="rounded-[var(--radius-card)] border border-line bg-surface p-4">
+    <div className="rounded-[var(--radius-card)] border border-ink/12 bg-panel p-4">
       <h3 className="font-medium">Pre-visit summary</h3>
 
       {data.status === 'pending' && (
@@ -126,7 +126,7 @@ export default function PreVisitSummaryCard({ appointmentId, canRetry }) {
               type="button"
               onClick={handleRetry}
               disabled={retrying}
-              className="mt-2 rounded-[var(--radius-pill)] border border-primary px-3 py-1.5 text-sm text-primary transition-colors hover:bg-primary-50 disabled:opacity-60"
+              className="mt-2 rounded-[var(--radius-pill)] border border-signal px-3 py-1.5 text-sm text-signal transition-colors hover:bg-signal/10 disabled:opacity-60"
             >
               {retrying ? 'Retrying...' : 'Generate again'}
             </button>
@@ -134,7 +134,7 @@ export default function PreVisitSummaryCard({ appointmentId, canRetry }) {
         </>
       )}
 
-      <div className="mt-4 border-t border-line pt-4">
+      <div className="mt-4 border-t border-ink/12 pt-4">
         <p className="mb-1 text-xs font-medium uppercase tracking-wide text-ink/50">Symptom form (raw)</p>
         <SymptomFormReadout form={data.symptomForm} />
       </div>

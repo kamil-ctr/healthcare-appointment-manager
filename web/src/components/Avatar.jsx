@@ -19,7 +19,7 @@ const SIZES = {
 export default function Avatar({ name, size = 'md' }) {
   return (
     <div
-      className={`flex shrink-0 items-center justify-center rounded-[var(--radius-card)] bg-primary-50 font-display font-bold text-primary ${SIZES[size]}`}
+      className={`flex shrink-0 items-center justify-center rounded-[var(--radius-card)] bg-signal/15 font-display font-bold text-signal ${SIZES[size]}`}
       aria-hidden="true"
     >
       {initials(name)}

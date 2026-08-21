@@ -41,7 +41,7 @@ export default function SymptomForm({ appointmentId, onSubmitted }) {
     }
   }
 
-  const textareaClass = 'rounded-[var(--radius-card)] border border-line bg-surface p-2 text-sm';
+  const textareaClass = 'rounded-[var(--radius-card)] border border-ink/12 bg-panel p-2 text-sm';
   const labelClass = 'flex flex-col gap-1 text-sm';
 
   return (
@@ -81,7 +81,7 @@ export default function SymptomForm({ appointmentId, onSubmitted }) {
           max={10}
           value={severity}
           onChange={(e) => setSeverity(Number(e.target.value))}
-          className="accent-primary"
+          className="accent-signal"
         />
       </label>
 
@@ -120,7 +120,7 @@ export default function SymptomForm({ appointmentId, onSubmitted }) {
       <button
         type="submit"
         disabled={submitting}
-        className="self-start rounded-[var(--radius-card)] bg-primary px-4 py-2 text-sm text-white transition-colors hover:bg-primary/90 disabled:opacity-60"
+        className="self-start rounded-[var(--radius-card)] bg-signal px-4 py-2 text-sm text-ground transition-colors hover:bg-signal/90 disabled:opacity-60"
       >
         {submitting ? 'Saving...' : 'Save symptoms'}
       </button>

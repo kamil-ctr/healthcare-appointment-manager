@@ -14,7 +14,7 @@ export default function SlotRail({ slots, selected, onSelect }) {
 
   return (
     <div className="flex flex-wrap gap-2">
-      {slots.map((slot) => {
+      {slots.map((slot, i) => {
         const isSelected = selected === slot.startsAt;
         const isTaken = !slot.available;
 
@@ -25,13 +25,14 @@ export default function SlotRail({ slots, selected, onSelect }) {
             disabled={isTaken}
             onClick={() => onSelect(slot.startsAt)}
             aria-pressed={isSelected}
+            style={{ animation: 'rail-in 240ms ease-out backwards', animationDelay: `${Math.min(i, 20) * 18}ms` }}
             className={[
               'rounded-[var(--radius-pill)] border px-3 py-2 font-data text-sm transition-colors',
               isTaken
-                ? 'cursor-not-allowed border-line bg-wash text-ink/40 line-through'
+                ? 'cursor-not-allowed border-ink/10 bg-ink/5 text-ink/35 line-through'
                 : isSelected
-                  ? 'border-primary bg-primary text-white'
-                  : 'border-primary text-primary hover:bg-primary-50',
+                  ? 'border-signal bg-signal text-ground shadow-[0_0_0_1px_var(--color-signal),0_0_18px_-4px_var(--color-signal)]'
+                  : 'border-signal/50 text-signal shadow-[0_0_10px_-5px_var(--color-signal)] hover:border-signal hover:bg-signal/10 hover:shadow-[0_0_14px_-4px_var(--color-signal)]',
             ].join(' ')}
           >
             <time dateTime={slot.startsAt}>{formatTime(slot.startsAt)}</time>

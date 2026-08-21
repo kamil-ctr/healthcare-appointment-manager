@@ -112,7 +112,7 @@ export default function NotesForm({ appointmentId, onSaved }) {
 
   if (loading) {
     return (
-      <div className="flex flex-col gap-3 rounded-[var(--radius-card)] border border-line bg-surface p-4">
+      <div className="flex flex-col gap-3 rounded-[var(--radius-card)] border border-ink/12 bg-panel p-4">
         <Skeleton variant="line" className="w-1/3" />
         <Skeleton variant="card" />
       </div>
@@ -120,12 +120,12 @@ export default function NotesForm({ appointmentId, onSaved }) {
   }
 
   const canSubmit = Boolean(clinicalNotes.trim() || diagnosis.trim());
-  const inputClass = 'rounded-[var(--radius-card)] border border-line bg-surface p-2 text-sm';
+  const inputClass = 'rounded-[var(--radius-card)] border border-ink/12 bg-panel p-2 text-sm';
 
   return (
     <form
       onSubmit={handleSubmit}
-      className="flex flex-col gap-4 rounded-[var(--radius-card)] border border-line bg-surface p-4"
+      className="flex flex-col gap-4 rounded-[var(--radius-card)] border border-ink/12 bg-panel p-4"
     >
       <h3 className="font-medium">{exists ? 'Amend visit notes' : 'Visit notes'}</h3>
 
@@ -157,7 +157,7 @@ export default function NotesForm({ appointmentId, onSaved }) {
           {prescriptions.map((p, i) => (
             <div
               key={i}
-              className="grid grid-cols-1 gap-2 rounded-[var(--radius-card)] border border-line p-3 sm:grid-cols-2"
+              className="grid grid-cols-1 gap-2 rounded-[var(--radius-card)] border border-ink/12 p-3 sm:grid-cols-2"
             >
               <label className="flex flex-col gap-1 text-sm">
                 <span className="text-ink/70">Medication</span>
@@ -222,7 +222,7 @@ export default function NotesForm({ appointmentId, onSaved }) {
             </div>
           ))}
         </div>
-        <button type="button" onClick={addPrescription} className="mt-2 text-sm text-primary hover:underline">
+        <button type="button" onClick={addPrescription} className="mt-2 text-sm text-signal hover:underline">
           + Add another medication
         </button>
       </div>
@@ -232,12 +232,12 @@ export default function NotesForm({ appointmentId, onSaved }) {
       ) : (
         error && <p className="text-sm text-urgent">{error.message}</p>
       )}
-      {savedNotice && <p className="text-sm text-primary">{savedNotice}</p>}
+      {savedNotice && <p className="text-sm text-signal">{savedNotice}</p>}
 
       <button
         type="submit"
         disabled={!canSubmit || saving}
-        className="self-start rounded-[var(--radius-card)] bg-primary px-4 py-2 text-sm text-white transition-colors hover:bg-primary/90 disabled:opacity-60"
+        className="self-start rounded-[var(--radius-card)] bg-signal px-4 py-2 text-sm text-ground transition-colors hover:bg-signal/90 disabled:opacity-60"
       >
         {saving ? 'Saving...' : exists ? 'Update notes' : 'Save notes'}
       </button>

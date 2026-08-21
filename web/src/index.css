@@ -1,18 +1,20 @@
-@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=Public+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --color-ink: #12201d;
-  --color-primary: #14675a;
-  --color-primary-50: #e8f2ef;
-  --color-line: #dce3e0;
-  --color-surface: #ffffff;
-  --color-wash: #f5f7f6;
-  --color-urgent: #a6301f;
-  --color-caution: #b4690e;
+  /* Grounded in a bedside monitor screen, not a dark-mode SaaS default:
+     a near-black with a whisper of teal (ambient, powered-idle), a bright
+     phosphor accent reserved for active/selected/confirmed signal only,
+     and the same alert-red/caution-amber convention real monitors use. */
+  --color-ground: #0a1614;
+  --color-panel: #12211f;
+  --color-ink: #eaf5f0;
+  --color-signal: #35e0a1;
+  --color-urgent: #f0544e;
+  --color-caution: #f0a94e;
 
-  --font-display: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
-  --font-body: 'Public Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'IBM Plex Sans Condensed', ui-sans-serif, system-ui, sans-serif;
+  --font-body: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
   --font-data: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
 
   --radius-card: 6px;
@@ -25,11 +27,20 @@
   html {
     font-family: var(--font-body);
     color: var(--color-ink);
-    background: var(--color-wash);
+    background: var(--color-ground);
   }
 
   body {
     margin: 0;
+    background-color: var(--color-ground);
+    /* The depth a glass panel needs to actually blur something - a quiet,
+       fixed mesh, not a moving gradient. Low percentages on purpose: this
+       is a clinical tool, the glow should read as ambient, not decorative. */
+    background-image:
+      radial-gradient(ellipse 900px 560px at 12% -8%, color-mix(in srgb, var(--color-signal) 13%, transparent), transparent 60%),
+      radial-gradient(ellipse 760px 640px at 104% 6%, color-mix(in srgb, var(--color-panel) 90%, var(--color-signal) 10%), transparent 55%),
+      radial-gradient(ellipse 900px 700px at 50% 118%, color-mix(in srgb, var(--color-caution) 5%, transparent), transparent 58%);
+    background-attachment: fixed;
   }
 
   h1,
@@ -38,6 +49,7 @@
   h4 {
     font-family: var(--font-display);
     font-weight: 700;
+    letter-spacing: -0.01em;
   }
 
   /* Every time/date/duration/id reads in the mono face - a schedule should
@@ -49,12 +61,25 @@
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-primary);
+    outline: 2px solid var(--color-signal);
     outline-offset: 2px;
   }
 
   * {
     transition-duration: 150ms;
+  }
+}
+
+/* The one orchestrated motion moment: the slot rail populating. Nowhere
+   else in the app animates on its own. */
+@keyframes rail-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 

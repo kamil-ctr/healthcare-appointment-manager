@@ -118,7 +118,7 @@ export default function Book() {
               type="button"
               onClick={() => setSelectedDate(iso)}
               className={`flex shrink-0 snap-start flex-col items-center rounded-[var(--radius-card)] border px-3 py-2 transition-colors sm:px-4 ${
-                isSelected ? 'border-primary bg-primary text-white' : 'border-line hover:border-primary'
+                isSelected ? 'border-signal bg-signal text-ground' : 'border-ink/12 hover:border-signal'
               }`}
             >
               <span className="text-xs uppercase">{date.toLocaleDateString([], { weekday: 'short' })}</span>
@@ -148,7 +148,7 @@ export default function Book() {
       )}
 
       {hold && (
-        <section className="rounded-[var(--radius-card)] border border-primary bg-primary-50 p-5">
+        <section className="rounded-[var(--radius-card)] border border-signal/30 bg-panel/70 p-5 backdrop-blur-md">
           <p className="font-data text-sm">
             <time dateTime={hold.startsAt}>
               {new Date(hold.startsAt).toLocaleString([], {
@@ -165,9 +165,9 @@ export default function Book() {
           </p>
 
           {symptomsSubmitted ? (
-            <p className="mt-4 text-sm text-primary">Symptom form submitted.</p>
+            <p className="mt-4 text-sm text-signal">Symptom form submitted.</p>
           ) : (
-            <div className="mt-4 border-t border-primary/20 pt-4">
+            <div className="mt-4 border-t border-signal/20 pt-4">
               <SymptomForm
                 appointmentId={hold.appointmentId}
                 onSubmitted={() => setSymptomsSubmitted(true)}
@@ -182,7 +182,7 @@ export default function Book() {
               onClick={handleConfirm}
               disabled={confirming || !symptomsSubmitted}
               title={symptomsSubmitted ? undefined : 'Submit the symptom form to enable confirming'}
-              className="rounded-[var(--radius-card)] bg-primary px-5 py-2 text-white transition-colors hover:bg-primary/90 disabled:opacity-60"
+              className="rounded-[var(--radius-card)] bg-signal px-5 py-2 text-ground transition-colors hover:bg-signal/90 disabled:opacity-60"
             >
               {confirming ? 'Confirming...' : 'Confirm appointment'}
             </button>
@@ -193,7 +193,7 @@ export default function Book() {
                 setSymptomsSubmitted(false);
                 refetchSlots();
               }}
-              className="rounded-[var(--radius-card)] border border-line px-5 py-2 hover:border-primary hover:text-primary"
+              className="rounded-[var(--radius-card)] border border-ink/12 px-5 py-2 hover:border-signal hover:text-signal"
             >
               Choose a different slot
             </button>

@@ -41,11 +41,11 @@ export default function Doctors() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search by name or speciality"
-          className="flex-1 rounded-[var(--radius-card)] border border-line px-3 py-2 text-sm focus:border-primary"
+          className="flex-1 rounded-[var(--radius-card)] border border-ink/12 px-3 py-2 text-sm focus:border-signal"
         />
         <button
           type="submit"
-          className="rounded-[var(--radius-card)] border border-line px-4 py-2 text-sm hover:border-primary hover:text-primary"
+          className="rounded-[var(--radius-card)] border border-ink/12 px-4 py-2 text-sm hover:border-signal hover:text-signal"
         >
           Search
         </button>
@@ -53,7 +53,7 @@ export default function Doctors() {
           <button
             type="button"
             onClick={() => setSearchParams(q ? { q } : {})}
-            className="rounded-[var(--radius-card)] border border-line px-4 py-2 text-sm hover:border-primary hover:text-primary"
+            className="rounded-[var(--radius-card)] border border-ink/12 px-4 py-2 text-sm hover:border-signal hover:text-signal"
           >
             Clear filter
           </button>
@@ -78,7 +78,7 @@ export default function Doctors() {
                 setQ('');
                 setSearchParams({});
               }}
-              className="mt-2 text-primary underline hover:no-underline"
+              className="mt-2 text-signal underline hover:no-underline"
             >
               Clear search
             </button>
@@ -91,7 +91,7 @@ export default function Doctors() {
             <Link
               key={d.id}
               to={`/doctors/${d.id}`}
-              className="flex items-center gap-4 rounded-[var(--radius-card)] border border-line bg-surface p-4 transition-colors hover:border-primary"
+              className="flex items-center gap-4 rounded-[var(--radius-card)] border border-ink/12 bg-panel p-4 transition-colors hover:border-signal"
             >
               <Avatar name={d.fullName} />
               <div>

@@ -21,14 +21,14 @@ function ToastItem({ toast, onDone }) {
   return (
     <div
       role="status"
-      className={`rounded-[var(--radius-card)] border bg-surface px-4 py-2 text-sm transition-[opacity,transform] duration-200 ${
+      className={`rounded-[var(--radius-card)] border bg-panel px-4 py-2 text-sm transition-[opacity,transform] duration-200 ${
         visible ? 'translate-y-0 opacity-100' : 'translate-y-1 opacity-0'
       } ${
         toast.tone === 'error'
           ? 'border-urgent text-urgent'
           : toast.tone === 'success'
-            ? 'border-primary text-primary'
-            : 'border-line text-ink'
+            ? 'border-signal text-signal'
+            : 'border-ink/12 text-ink'
       }`}
     >
       {toast.message}

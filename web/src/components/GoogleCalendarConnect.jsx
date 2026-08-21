@@ -49,7 +49,7 @@ export default function GoogleCalendarConnect() {
   if (state.status === 'loading' || state.status === 'error') return null;
 
   return (
-    <div className="mb-6 rounded-[var(--radius-card)] border border-line bg-surface p-4 text-sm">
+    <div className="mb-6 rounded-[var(--radius-card)] border border-ink/12 bg-panel p-4 text-sm">
       <p className="font-medium">Google Calendar</p>
       {state.connected ? (
         <>
@@ -61,7 +61,7 @@ export default function GoogleCalendarConnect() {
             type="button"
             onClick={handleDisconnect}
             disabled={busy}
-            className="mt-3 rounded-[var(--radius-pill)] border border-line px-3 py-1.5 text-sm transition-colors hover:border-urgent hover:text-urgent disabled:opacity-60"
+            className="mt-3 rounded-[var(--radius-pill)] border border-ink/12 px-3 py-1.5 text-sm transition-colors hover:border-urgent hover:text-urgent disabled:opacity-60"
           >
             {busy ? 'Disconnecting...' : 'Disconnect'}
           </button>
@@ -76,7 +76,7 @@ export default function GoogleCalendarConnect() {
             type="button"
             onClick={handleConnect}
             disabled={busy}
-            className="mt-3 rounded-[var(--radius-card)] bg-primary px-4 py-2 text-sm text-white transition-colors hover:bg-primary/90 disabled:opacity-60"
+            className="mt-3 rounded-[var(--radius-card)] bg-signal px-4 py-2 text-sm text-ground transition-colors hover:bg-signal/90 disabled:opacity-60"
           >
             {busy ? 'Connecting...' : 'Connect Google Calendar'}
           </button>
