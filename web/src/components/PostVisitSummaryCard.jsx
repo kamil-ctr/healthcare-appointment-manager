@@ -170,7 +170,7 @@ export default function PostVisitSummaryCard({ appointmentId, canRetry }) {
         {data.status === 'failed' && (
           <>
             <p className="text-sm text-urgent">Summary unavailable.</p>
-            {canRetry && (
+            {canRetry ? (
               <button
                 type="button"
                 onClick={handleRetry}
@@ -179,6 +179,8 @@ export default function PostVisitSummaryCard({ appointmentId, canRetry }) {
               >
                 {retrying ? 'Retrying...' : 'Generate again'}
               </button>
+            ) : (
+              <p className="mt-1 text-sm text-ink/60">Your doctor can regenerate this summary.</p>
             )}
           </>
         )}
