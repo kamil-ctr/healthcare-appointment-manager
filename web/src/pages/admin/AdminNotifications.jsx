@@ -1,25 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../AuthContext.jsx';
+import { useToast } from '../../components/Toast.jsx';
+import StatusBadge from '../../components/StatusBadge.jsx';
+import Skeleton from '../../components/Skeleton.jsx';
 
 const STATUS_OPTIONS = ['', 'pending', 'processing', 'sent', 'failed'];
 const TOPIC_OPTIONS = ['', 'email', 'calendar'];
 
-const STATUS_BADGE = {
-  sent: { color: 'bg-primary', label: 'Sent' },
-  pending: { color: 'bg-caution', label: 'Pending' },
-  processing: { color: 'bg-caution', label: 'Processing' },
-  failed: { color: 'bg-urgent', label: 'Failed' },
-};
-
-function StatusBadge({ status }) {
-  const cfg = STATUS_BADGE[status] || { color: 'bg-ink/30', label: status };
-  return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-medium">
-      <span className={`h-2.5 w-2.5 shrink-0 ${cfg.color}`} aria-hidden="true" />
-      {cfg.label}
-    </span>
-  );
-}
+const STATUS_TONE = { sent: 'primary', pending: 'caution', processing: 'caution', failed: 'urgent' };
+const STATUS_TEXT = { sent: 'Sent', pending: 'Pending', processing: 'Processing', failed: 'Failed' };
 
 function formatDateTime(iso) {
   if (!iso) return '-';
@@ -31,10 +20,11 @@ function formatDateTime(iso) {
   });
 }
 
-const select = 'rounded-[var(--radius-card)] border border-line px-3 py-2 text-sm outline-none focus:border-primary';
+const select = 'rounded-[var(--radius-card)] border border-line px-3 py-2 text-sm focus:border-primary';
 
 export default function AdminNotifications() {
   const { call } = useAuth();
+  const { notify } = useToast();
   const [status, setStatus] = useState('');
   const [topic, setTopic] = useState('');
   const [page, setPage] = useState(1);
@@ -60,7 +50,7 @@ export default function AdminNotifications() {
       await call(`/admin/outbox/${id}/retry`, { method: 'POST' });
       load();
     } catch (err) {
-      window.alert(err.message);
+      notify(err.message, 'error');
     } finally {
       setRetryingId(null);
     }
@@ -107,7 +97,14 @@ export default function AdminNotifications() {
         </label>
       </div>
 
-      {state.status === 'loading' && <p className="text-sm text-ink/60">Loading...</p>}
+      {state.status === 'loading' && (
+        <div className="flex flex-col gap-2">
+          <Skeleton variant="row" />
+          <Skeleton variant="row" />
+          <Skeleton variant="row" />
+          <Skeleton variant="row" />
+        </div>
+      )}
       {state.status === 'error' && <p className="text-sm text-urgent">{state.message}</p>}
 
       {state.status === 'ok' && (
@@ -131,7 +128,7 @@ export default function AdminNotifications() {
                     <td className="px-4 py-2 font-data">{row.topic}</td>
                     <td className="px-4 py-2">{row.eventType}</td>
                     <td className="px-4 py-2">
-                      <StatusBadge status={row.status} />
+                      <StatusBadge tone={STATUS_TONE[row.status] || 'neutral'} label={STATUS_TEXT[row.status] || row.status} />
                     </td>
                     <td className="px-4 py-2 font-data">
                       {row.attempts}/{row.maxAttempts}

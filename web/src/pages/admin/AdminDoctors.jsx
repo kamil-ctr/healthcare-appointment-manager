@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../AuthContext.jsx';
+import { useToast } from '../../components/Toast.jsx';
+import StatusBadge from '../../components/StatusBadge.jsx';
+import Skeleton from '../../components/Skeleton.jsx';
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const input = 'rounded-[var(--radius-card)] border border-line px-3 py-2 text-sm outline-none focus:border-primary';
+const input = 'rounded-[var(--radius-card)] border border-line px-3 py-2 text-sm focus:border-primary';
 const label = 'flex flex-col gap-1 text-sm';
 const linkBtn = 'text-sm text-primary underline hover:no-underline';
 const primaryBtn =
@@ -54,6 +57,7 @@ function DoctorsList({ onCreate, onSelect }) {
             type="checkbox"
             checked={includeInactive}
             onChange={(e) => setIncludeInactive(e.target.checked)}
+            className="accent-primary"
           />
           Show deactivated
         </label>
@@ -62,7 +66,13 @@ function DoctorsList({ onCreate, onSelect }) {
         </button>
       </div>
 
-      {state.status === 'loading' && <p className="text-sm text-ink/60">Loading...</p>}
+      {state.status === 'loading' && (
+        <div className="flex flex-col gap-2">
+          <Skeleton variant="row" />
+          <Skeleton variant="row" />
+          <Skeleton variant="row" />
+        </div>
+      )}
       {state.status === 'error' && <p className="text-sm text-urgent">{state.message}</p>}
       {state.status === 'ok' && (
         <div className="overflow-x-auto rounded-[var(--radius-card)] border border-line bg-surface">
@@ -82,7 +92,9 @@ function DoctorsList({ onCreate, onSelect }) {
                   <td className="px-4 py-2">{d.fullName}</td>
                   <td className="px-4 py-2">{d.specialisation}</td>
                   <td className="px-4 py-2">{d.email}</td>
-                  <td className="px-4 py-2">{d.isActive ? 'active' : 'deactivated'}</td>
+                  <td className="px-4 py-2">
+                    <StatusBadge tone={d.isActive ? 'primary' : 'neutral'} label={d.isActive ? 'Active' : 'Deactivated'} />
+                  </td>
                   <td className="px-4 py-2">
                     <button className={linkBtn} onClick={() => onSelect(d.id)}>
                       View
@@ -219,7 +231,10 @@ function CreateDoctorForm({ onCancel, onCreated }) {
 
 function DoctorDetail({ doctorId, onBack }) {
   const { call } = useAuth();
+  const { notify } = useToast();
   const [state, setState] = useState({ status: 'loading' });
+  const [confirmingDeactivate, setConfirmingDeactivate] = useState(false);
+  const [deactivating, setDeactivating] = useState(false);
 
   function reload() {
     setState({ status: 'loading' });
@@ -231,14 +246,23 @@ function DoctorDetail({ doctorId, onBack }) {
   useEffect(reload, [call, doctorId]);
 
   async function handleDeactivate() {
-    const result = await call(`/admin/doctors/${doctorId}`, { method: 'DELETE' });
-    window.alert(
-      `Doctor deactivated. Future active appointments affected: ${result.futureActiveAppointments}`
-    );
-    reload();
+    setDeactivating(true);
+    try {
+      const result = await call(`/admin/doctors/${doctorId}`, { method: 'DELETE' });
+      notify(
+        `Doctor deactivated. ${result.futureActiveAppointments} future appointment(s) affected.`,
+        'success'
+      );
+      setConfirmingDeactivate(false);
+      reload();
+    } catch (err) {
+      notify(err.message, 'error');
+    } finally {
+      setDeactivating(false);
+    }
   }
 
-  if (state.status === 'loading') return <p className="text-sm text-ink/60">Loading...</p>;
+  if (state.status === 'loading') return <Skeleton variant="card" className="h-56" />;
   if (state.status === 'error') return <p className="text-sm text-urgent">{state.message}</p>;
 
   const { doctor } = state;
@@ -254,13 +278,37 @@ function DoctorDetail({ doctorId, onBack }) {
       <p className="mb-3 text-sm text-ink/60">
         {doctor.email} - {doctor.isActive ? 'active' : 'deactivated'}
       </p>
-      {doctor.isActive && (
+      {doctor.isActive && !confirmingDeactivate && (
         <button
-          onClick={handleDeactivate}
+          onClick={() => setConfirmingDeactivate(true)}
           className="rounded-[var(--radius-card)] border border-urgent px-3 py-1.5 text-sm text-urgent hover:bg-urgent/5"
         >
           Deactivate doctor
         </button>
+      )}
+      {confirmingDeactivate && (
+        <div className="rounded-[var(--radius-card)] border border-urgent bg-urgent/5 p-3 text-sm">
+          <p className="mb-2 text-ink">
+            This deactivates {doctor.fullName} and cancels their future active appointments.
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={handleDeactivate}
+              disabled={deactivating}
+              className="rounded-[var(--radius-pill)] bg-urgent px-3 py-1.5 text-sm text-white transition-colors hover:bg-urgent/90 disabled:opacity-60"
+            >
+              {deactivating ? 'Deactivating...' : 'Confirm deactivate'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmingDeactivate(false)}
+              disabled={deactivating}
+              className="rounded-[var(--radius-pill)] border border-line px-3 py-1.5 text-sm hover:border-primary hover:text-primary disabled:opacity-60"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
 
       <AvailabilityEditor doctorId={doctorId} availability={doctor.availability} onSaved={reload} />

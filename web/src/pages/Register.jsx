@@ -32,8 +32,7 @@ export default function Register() {
     }
   }
 
-  const inputClass =
-    'rounded-[var(--radius-card)] border border-line px-3 py-2 outline-none focus:border-primary';
+  const inputClass = 'rounded-[var(--radius-card)] border border-line px-3 py-2 focus:border-primary';
 
   return (
     <main className="mx-auto max-w-sm px-4 py-16 sm:px-6">

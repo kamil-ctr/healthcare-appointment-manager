@@ -4,6 +4,7 @@ import { useAuth } from '../AuthContext.jsx';
 import { useToast } from '../components/Toast.jsx';
 import UrgencyBadge from '../components/UrgencyBadge.jsx';
 import GoogleCalendarConnect from '../components/GoogleCalendarConnect.jsx';
+import Skeleton from '../components/Skeleton.jsx';
 
 // See Book.jsx for why this isn't date.toISOString().slice(0, 10).
 function toISODate(date) {
@@ -69,7 +70,13 @@ export default function DoctorQueue() {
         className="mb-6 rounded-[var(--radius-card)] border border-line bg-surface px-3 py-2 font-data text-sm"
       />
 
-      {state.status === 'loading' && <p className="text-sm text-ink/60">Loading...</p>}
+      {state.status === 'loading' && (
+        <div className="flex flex-col gap-3">
+          <Skeleton variant="row" />
+          <Skeleton variant="row" />
+          <Skeleton variant="row" />
+        </div>
+      )}
       {state.status === 'error' && <p className="text-sm text-urgent">{state.message}</p>}
       {state.status === 'ok' && state.queue.length === 0 && (
         <p className="text-sm text-ink/60">No confirmed appointments for this day.</p>

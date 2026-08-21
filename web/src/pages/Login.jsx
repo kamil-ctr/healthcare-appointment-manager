@@ -48,7 +48,7 @@ export default function Login() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="rounded-[var(--radius-card)] border border-line px-3 py-2 outline-none focus:border-primary"
+            className="rounded-[var(--radius-card)] border border-line px-3 py-2 focus:border-primary"
           />
         </Field>
         <Field label="Password" name="password" error={error}>
@@ -57,7 +57,7 @@ export default function Login() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="rounded-[var(--radius-card)] border border-line px-3 py-2 outline-none focus:border-primary"
+            className="rounded-[var(--radius-card)] border border-line px-3 py-2 focus:border-primary"
           />
         </Field>
 

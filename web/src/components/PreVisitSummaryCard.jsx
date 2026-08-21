@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../AuthContext.jsx';
 import UrgencyBadge from './UrgencyBadge.jsx';
+import Skeleton from './Skeleton.jsx';
 
 function SymptomFormReadout({ form }) {
   if (!form) return null;
@@ -66,7 +67,12 @@ export default function PreVisitSummaryCard({ appointmentId, canRetry }) {
   }
 
   if (state.status === 'loading') {
-    return <p className="text-sm text-ink/60">Loading pre-visit summary...</p>;
+    return (
+      <div className="rounded-[var(--radius-card)] border border-line bg-surface p-4">
+        <Skeleton variant="line" className="mb-3 w-1/3" />
+        <Skeleton variant="card" />
+      </div>
+    );
   }
 
   if (state.status === 'error') {

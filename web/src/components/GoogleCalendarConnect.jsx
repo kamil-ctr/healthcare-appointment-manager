@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../AuthContext.jsx';
+import { useToast } from './Toast.jsx';
 
 /**
  * A quiet inline card, never a blocking modal - connection status, the
@@ -9,6 +10,7 @@ import { useAuth } from '../AuthContext.jsx';
  */
 export default function GoogleCalendarConnect() {
   const { call } = useAuth();
+  const { notify } = useToast();
   const [state, setState] = useState({ status: 'loading' });
   const [busy, setBusy] = useState(false);
 
@@ -27,7 +29,7 @@ export default function GoogleCalendarConnect() {
       window.location.href = url;
     } catch (err) {
       setBusy(false);
-      window.alert(err.message);
+      notify(err.message, 'error');
     }
   }
 
@@ -37,7 +39,7 @@ export default function GoogleCalendarConnect() {
       await call('/google/disconnect', { method: 'DELETE' });
       load();
     } catch (err) {
-      window.alert(err.message);
+      notify(err.message, 'error');
     } finally {
       setBusy(false);
     }

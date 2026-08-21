@@ -5,6 +5,8 @@ import { useToast } from '../components/Toast.jsx';
 import SlotRail from '../components/SlotRail.jsx';
 import HoldCountdown from '../components/HoldCountdown.jsx';
 import GoogleCalendarConnect from '../components/GoogleCalendarConnect.jsx';
+import StatusBadge from '../components/StatusBadge.jsx';
+import Skeleton from '../components/Skeleton.jsx';
 
 function formatDateTime(iso) {
   return new Date(iso).toLocaleString([], {
@@ -24,6 +26,16 @@ const STATUS_LABEL = {
   cancelled_by_doctor: 'Cancelled by doctor',
   cancelled_by_leave: 'Cancelled - doctor on leave',
   expired: 'Expired hold',
+};
+
+const STATUS_TONE = {
+  held: 'caution',
+  confirmed: 'primary',
+  completed: 'primary',
+  cancelled_by_patient: 'neutral',
+  cancelled_by_doctor: 'neutral',
+  cancelled_by_leave: 'neutral',
+  expired: 'neutral',
 };
 
 const ACTIVE_STATUSES = ['held', 'confirmed'];
@@ -121,7 +133,17 @@ export default function Appointments() {
     }
   }
 
-  if (state.status === 'loading') return <p className="p-10 text-sm text-ink/60">Loading...</p>;
+  if (state.status === 'loading') {
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
+        <div className="flex flex-col gap-3">
+          <Skeleton variant="card" />
+          <Skeleton variant="card" />
+          <Skeleton variant="card" />
+        </div>
+      </main>
+    );
+  }
   if (state.status === 'error') return <p className="p-10 text-sm text-urgent">{state.message}</p>;
 
   const upcoming = state.appointments.filter((a) => ACTIVE_STATUSES.includes(a.status));
@@ -130,7 +152,10 @@ export default function Appointments() {
   function renderAppointment(a) {
     const isRescheduling = reschedulingId === a.id;
     return (
-      <li key={a.id} className="rounded-[var(--radius-card)] border border-line bg-surface p-4">
+      <li
+        key={a.id}
+        className="rounded-[var(--radius-card)] border border-line bg-surface p-4 transition-colors has-[a:hover]:border-primary"
+      >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Link to={`/appointments/${a.id}`} className="hover:underline">
             <p className="font-medium">{a.doctorName}</p>
@@ -138,7 +163,9 @@ export default function Appointments() {
             <p className="font-data text-sm">
               <time dateTime={a.startsAt}>{formatDateTime(a.startsAt)}</time>
             </p>
-            <p className="text-xs text-ink/50">{STATUS_LABEL[a.status] || a.status}</p>
+            <div className="mt-1">
+              <StatusBadge tone={STATUS_TONE[a.status] || 'neutral'} label={STATUS_LABEL[a.status] || a.status} />
+            </div>
           </Link>
           {ACTIVE_STATUSES.includes(a.status) && (
             <div className="flex gap-2">
@@ -154,7 +181,7 @@ export default function Appointments() {
                 onClick={() => handleCancel(a.id)}
                 className="rounded-[var(--radius-pill)] border border-urgent px-3 py-1.5 text-sm text-urgent hover:bg-urgent/5"
               >
-                Cancel
+                Cancel appointment
               </button>
             </div>
           )}

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../AuthContext.jsx';
 import Avatar from '../components/Avatar.jsx';
+import Skeleton from '../components/Skeleton.jsx';
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -17,7 +18,14 @@ export default function DoctorProfile() {
       .catch((err) => setState({ status: 'error', message: err.message }));
   }, [call, id]);
 
-  if (state.status === 'loading') return <p className="p-10 text-sm text-ink/60">Loading...</p>;
+  if (state.status === 'loading') {
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
+        <Skeleton variant="line" className="mb-3 w-1/3" />
+        <Skeleton variant="card" />
+      </main>
+    );
+  }
   if (state.status === 'error') return <p className="p-10 text-sm text-urgent">{state.message}</p>;
 
   const { doctor } = state;

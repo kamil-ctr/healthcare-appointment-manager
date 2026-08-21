@@ -23,7 +23,7 @@ export default function HoldCountdown({ expiresAt, onExpire }) {
   const isCaution = totalSeconds < 120;
 
   return (
-    <span className={`font-data text-sm ${isCaution ? 'text-caution' : 'text-ink'}`}>
+    <span className={`font-data text-base font-semibold tabular-nums ${isCaution ? 'text-caution' : 'text-ink'}`}>
       hold expires in {mm}:{ss}
     </span>
   );

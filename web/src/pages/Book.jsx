@@ -5,6 +5,7 @@ import { useToast } from '../components/Toast.jsx';
 import SlotRail from '../components/SlotRail.jsx';
 import HoldCountdown from '../components/HoldCountdown.jsx';
 import SymptomForm from '../components/SymptomForm.jsx';
+import Skeleton from '../components/Skeleton.jsx';
 
 // NOT date.toISOString().slice(0, 10) - that converts to UTC first, which
 // silently shifts the calendar date by a day on any non-UTC-offset
@@ -107,7 +108,7 @@ export default function Book() {
       <h1 className="text-2xl">{doctor ? `Book with ${doctor.fullName}` : 'Book an appointment'}</h1>
       {doctor && <p className="mb-6 text-sm text-ink/60">{doctor.specialisation}</p>}
 
-      <div className="mb-6 flex gap-2 overflow-x-auto pb-2">
+      <div className="mb-6 flex snap-x snap-mandatory gap-2 overflow-x-auto scroll-px-4 pb-2">
         {dateOptions.map((date) => {
           const iso = toISODate(date);
           const isSelected = iso === selectedDate;
@@ -116,7 +117,7 @@ export default function Book() {
               key={iso}
               type="button"
               onClick={() => setSelectedDate(iso)}
-              className={`flex shrink-0 flex-col items-center rounded-[var(--radius-card)] border px-4 py-2 transition-colors ${
+              className={`flex shrink-0 snap-start flex-col items-center rounded-[var(--radius-card)] border px-3 py-2 transition-colors sm:px-4 ${
                 isSelected ? 'border-primary bg-primary text-white' : 'border-line hover:border-primary'
               }`}
             >
@@ -131,7 +132,11 @@ export default function Book() {
         <section>
           <h2 className="mb-3 text-sm font-medium text-ink/70">Available times</h2>
           {loadingSlots ? (
-            <p className="text-sm text-ink/60">Loading slots...</p>
+            <div className="flex flex-wrap gap-2">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <Skeleton key={i} variant="row" className="w-16" />
+              ))}
+            </div>
           ) : (
             <SlotRail slots={daySlots} selected={null} onSelect={handleSelectSlot} />
           )}

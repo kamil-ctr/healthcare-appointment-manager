@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../AuthContext.jsx';
 import Avatar from '../components/Avatar.jsx';
+import Skeleton from '../components/Skeleton.jsx';
 
 const SPECIALITIES = [
   'General Medicine',
@@ -37,9 +38,31 @@ function ScheduleMark() {
   );
 }
 
+const HERO_COPY = {
+  doctor: {
+    heading: 'Your day, organized by urgency.',
+    body: 'See who is on your schedule, review pre-visit summaries, and keep notes and prescriptions in one place.',
+    ctaTo: '/doctor',
+    ctaLabel: 'Go to your queue',
+  },
+  admin: {
+    heading: 'Run the clinic from one place.',
+    body: 'Manage doctors, availability, and leave days, and keep an eye on every notification going out.',
+    ctaTo: '/admin',
+    ctaLabel: 'Go to admin',
+  },
+  default: {
+    heading: 'Book a doctor you trust, in minutes.',
+    body: 'See real availability, hold a slot while you fill in your details, and get a confirmed appointment - no phone calls, no guesswork.',
+    ctaTo: '/doctors',
+    ctaLabel: 'Find a doctor',
+  },
+};
+
 export default function Home() {
   const { auth, call } = useAuth();
   const [doctors, setDoctors] = useState(null);
+  const hero = HERO_COPY[auth?.user.role] || HERO_COPY.default;
 
   useEffect(() => {
     if (!auth) {
@@ -55,16 +78,13 @@ export default function Home() {
     <main>
       <section className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-16 sm:px-6 md:grid-cols-2 md:py-24">
         <div>
-          <h1 className="text-4xl leading-tight sm:text-5xl">Book a doctor you trust, in minutes.</h1>
-          <p className="mt-4 max-w-md text-ink/70">
-            See real availability, hold a slot while you fill in your details, and get a
-            confirmed appointment - no phone calls, no guesswork.
-          </p>
+          <h1 className="text-4xl leading-tight sm:text-5xl">{hero.heading}</h1>
+          <p className="mt-4 max-w-md text-ink/70">{hero.body}</p>
           <Link
-            to="/doctors"
+            to={hero.ctaTo}
             className="mt-6 inline-block rounded-[var(--radius-card)] bg-primary px-5 py-2.5 text-white transition-colors hover:bg-primary/90"
           >
-            Find a doctor
+            {hero.ctaLabel}
           </Link>
         </div>
         <div className="aspect-[4/3] w-full">
@@ -99,7 +119,14 @@ export default function Home() {
             to browse available doctors.
           </p>
         )}
-        {auth && doctors === null && <p className="text-sm text-ink/60">Loading...</p>}
+        {auth && doctors === null && (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+            <Skeleton variant="card" />
+            <Skeleton variant="card" />
+            <Skeleton variant="card" />
+            <Skeleton variant="card" />
+          </div>
+        )}
         {auth && doctors?.length === 0 && <p className="text-sm text-ink/60">No doctors listed yet.</p>}
         {auth && doctors && doctors.length > 0 && (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">

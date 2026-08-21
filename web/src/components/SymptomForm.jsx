@@ -81,6 +81,7 @@ export default function SymptomForm({ appointmentId, onSubmitted }) {
           max={10}
           value={severity}
           onChange={(e) => setSeverity(Number(e.target.value))}
+          className="accent-primary"
         />
       </label>
 

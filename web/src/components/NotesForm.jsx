@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../AuthContext.jsx';
 import Field from './Field.jsx';
+import Skeleton from './Skeleton.jsx';
 
 const FREQUENCY_OPTIONS = [1, 2, 3, 4, 5, 6];
 const emptyPrescription = () => ({
@@ -109,7 +110,14 @@ export default function NotesForm({ appointmentId, onSaved }) {
     }
   }
 
-  if (loading) return <p className="text-sm text-ink/60">Loading notes...</p>;
+  if (loading) {
+    return (
+      <div className="flex flex-col gap-3 rounded-[var(--radius-card)] border border-line bg-surface p-4">
+        <Skeleton variant="line" className="w-1/3" />
+        <Skeleton variant="card" />
+      </div>
+    );
+  }
 
   const canSubmit = Boolean(clinicalNotes.trim() || diagnosis.trim());
   const inputClass = 'rounded-[var(--radius-card)] border border-line bg-surface p-2 text-sm';

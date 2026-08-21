@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../AuthContext.jsx';
+import Skeleton from './Skeleton.jsx';
 
 function PrescriptionTable({ prescriptions }) {
   if (!prescriptions || prescriptions.length === 0) {
@@ -89,7 +90,14 @@ export default function PostVisitSummaryCard({ appointmentId, canRetry }) {
     }
   }
 
-  if (state.status === 'loading') return <p className="text-sm text-ink/60">Loading visit summary...</p>;
+  if (state.status === 'loading') {
+    return (
+      <div className="rounded-[var(--radius-card)] border border-line bg-surface p-4">
+        <Skeleton variant="line" className="mb-3 w-1/3" />
+        <Skeleton variant="card" />
+      </div>
+    );
+  }
   if (state.status === 'error') {
     if (state.code === 'NOT_FOUND') {
       return <p className="text-sm text-ink/60">Visit notes have not been submitted for this appointment yet.</p>;

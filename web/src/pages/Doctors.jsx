@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../AuthContext.jsx';
 import Avatar from '../components/Avatar.jsx';
+import Skeleton from '../components/Skeleton.jsx';
 
 export default function Doctors() {
   const { call } = useAuth();
@@ -40,7 +41,7 @@ export default function Doctors() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search by name or speciality"
-          className="flex-1 rounded-[var(--radius-card)] border border-line px-3 py-2 text-sm outline-none focus:border-primary"
+          className="flex-1 rounded-[var(--radius-card)] border border-line px-3 py-2 text-sm focus:border-primary"
         />
         <button
           type="submit"
@@ -59,10 +60,30 @@ export default function Doctors() {
         )}
       </form>
 
-      {state.status === 'loading' && <p className="text-sm text-ink/60">Loading...</p>}
+      {state.status === 'loading' && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
+          <Skeleton variant="card" />
+          <Skeleton variant="card" />
+          <Skeleton variant="card" />
+        </div>
+      )}
       {state.status === 'error' && <p className="text-sm text-urgent">{state.message}</p>}
       {state.status === 'ok' && state.doctors.length === 0 && (
-        <p className="text-sm text-ink/60">No doctors match.</p>
+        <div className="text-sm text-ink/60">
+          <p>No doctors match.</p>
+          {(q || specialisation) && (
+            <button
+              type="button"
+              onClick={() => {
+                setQ('');
+                setSearchParams({});
+              }}
+              className="mt-2 text-primary underline hover:no-underline"
+            >
+              Clear search
+            </button>
+          )}
+        </div>
       )}
       {state.status === 'ok' && state.doctors.length > 0 && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">

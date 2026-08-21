@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../AuthContext.jsx';
+import Skeleton from './Skeleton.jsx';
 
 const EVENT_LABEL = {
   held: 'Slot held',
@@ -54,7 +55,15 @@ export default function AppointmentTimeline({ appointmentId }) {
     };
   }, [call, appointmentId]);
 
-  if (state.status === 'loading') return <p className="text-sm text-ink/60">Loading timeline...</p>;
+  if (state.status === 'loading') {
+    return (
+      <div className="flex flex-col gap-3">
+        <Skeleton variant="line" className="w-40" />
+        <Skeleton variant="line" className="w-56" />
+        <Skeleton variant="line" className="w-32" />
+      </div>
+    );
+  }
   if (state.status === 'error') return <p className="text-sm text-urgent">{state.message}</p>;
   if (state.events.length === 0) return <p className="text-sm text-ink/60">No events yet.</p>;
 
@@ -63,7 +72,7 @@ export default function AppointmentTimeline({ appointmentId }) {
       {state.events.map((ev, i) => (
         <li key={i} className="relative">
           <span
-            className="absolute -left-[21px] top-1 h-2 w-2 rounded-full bg-primary"
+            className="absolute -left-[21px] top-1 h-2 w-2 rounded-[var(--radius-pill)] bg-primary"
             aria-hidden="true"
           />
           <p className="font-data text-xs text-ink/50">
