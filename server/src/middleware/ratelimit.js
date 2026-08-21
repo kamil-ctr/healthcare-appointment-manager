@@ -17,6 +17,23 @@ const SWEEP_INTERVAL_MS = 5 * 60_000;
 
 const buckets = new Map(); // key -> timestamps (ms), ascending
 
+/**
+ * Render's onrender.com domains are always fronted by Cloudflare (verified:
+ * every response carries `server: cloudflare` / `cf-ray`), which sits in
+ * front of Render's own edge - two proxy hops, not one. `app.set('trust
+ * proxy', 1)` only accounts for one, so `req.ip` resolves to Render's inner
+ * edge address rather than the real client, and every request looked like
+ * a "new" IP to this limiter - verified in production: 35 rapid requests
+ * against a 30/window limit, zero 429s. `cf-connecting-ip` is set by
+ * Cloudflare's edge itself to the true client IP and is not something a
+ * client can override (Cloudflare overwrites it), which is what makes it
+ * safe to trust here specifically - this app is only ever reached through
+ * Cloudflare, never directly.
+ */
+function clientIp(req) {
+  return req.headers['cf-connecting-ip'] || req.ip;
+}
+
 function pruneOldEntries(timestamps, cutoff) {
   let start = 0;
   while (start < timestamps.length && timestamps[start] <= cutoff) start += 1;
@@ -43,7 +60,7 @@ sweepTimer.unref(); // never keeps the process alive on its own
  */
 export function rateLimit(routeName, max, windowMs = WINDOW_MS) {
   return (req, res, next) => {
-    const key = `${routeName}:${req.ip}`;
+    const key = `${routeName}:${clientIp(req)}`;
     const now = Date.now();
     const cutoff = now - windowMs;
     const timestamps = pruneOldEntries(buckets.get(key) || [], cutoff);
