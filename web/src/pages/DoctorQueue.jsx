@@ -66,7 +66,9 @@ export default function DoctorQueue() {
       <input
         type="date"
         value={date}
-        onChange={(e) => setDate(e.target.value)}
+        onChange={(e) => {
+          if (e.target.value) setDate(e.target.value);
+        }}
         className="mb-6 rounded-[var(--radius-card)] border border-line bg-surface px-3 py-2 font-data text-sm"
       />
 
