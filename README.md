@@ -1,5 +1,7 @@
 # Healthcare Appointment & Follow-up Manager
 
+*by Mohammad Kamil*
+
 A clinic appointment platform with separate **patient**, **doctor**, and **admin** portals.
 Patients book slots and submit symptoms in advance; an LLM produces a pre-visit summary with an
 urgency level for the doctor and a patient-friendly summary after the visit. Both sides are kept
@@ -14,6 +16,8 @@ informed through email and Google Calendar.
 Stack: Render (Oregon/US West) + Vercel + Neon Postgres (Oregon). Full deployment details, the
 real settings used, and every issue hit getting there: [`docs/deployment.md`](docs/deployment.md).
 
+![Patient home — find a doctor](https://raw.githubusercontent.com/kamil-ctr/healthcare-appointment-manager/main/docs/screenshots/home-doctor-search.png)
+
 **Demo credentials** (seeded by `server/scripts/seed-demo.js`, all roles share one password):
 
 | Role | Email | Password |
@@ -27,27 +31,45 @@ real settings used, and every issue hit getting there: [`docs/deployment.md`](do
 
 ---
 
-## How this was built
+## What's built
 
-Ten days, one commit per day (see `git log --reverse` for the exact sequence and messages):
+Organized by system area, not build order.
 
-| Day | Commit | Scope |
-|---|---|---|
-| 1 | `f775cc4` | Schema, config, DB layer, health checks, React shell |
-| 2 | `92a0975` | Auth: register/login, scrypt, JWT, role middleware |
-| 3 | `67752b8` | Admin portal: doctor CRUD, availability, leave cascade |
-| 4 | `3b87cb3` | Booking engine and patient frontend with design system |
-| 5 | `d437fe6` | Symptom capture and pre-visit LLM summary |
-| 6 | `2463c91` | Outbox worker and email delivery |
-| 7 | `db54ba8` | Google Calendar OAuth 2.0 integration |
-| 7+ | `f822fab` | Hardening: overlap exclusion constraints, inline hold expiry, event log, ICS |
-| 8 | `fafd18c` | Post-visit notes, prescriptions, post-visit summary, med reminders |
-| 9 | `2395666`…`1bad9e4` | Deployment (Neon+Render+Vercel), security-header/rate-limiter fixes, honest production numbers |
-| 10 | (this) | System design write-up, full README rewrite, reproducibility + submission audit |
+- **Auth & access control** — JWT signed with `node:crypto` HMAC-SHA256 (not `jsonwebtoken`),
+  scrypt password hashing, role-scoped middleware (`requireAuth`/`requireRole`) on every
+  protected route.
+- **Admin portal** — doctor CRUD, weekly availability (applied atomically, never partially),
+  leave-day cascade (`services/leave.js`) that cancels affected appointments and notifies both
+  sides inside one transaction.
+- **Booking engine** — SQL-generated, timezone-correct slot grid (`services/slots.js`); a
+  two-phase hold → confirm flow so a patient has time to fill in a symptom form before the slot
+  is final; concurrency resolved entirely by database constraints, never a read-then-write check
+  in JavaScript.
+- **Symptom capture & pre-visit triage** — patients submit symptoms before the visit; an LLM
+  produces an urgency-scored summary that feeds the doctor's queue, with full failure-mode
+  handling that never blocks a booking.
+- **Notifications** — every outbound email and calendar update is a row in a transactional
+  `outbox`, inserted in the same transaction as the business change; a background worker claims
+  rows with `FOR UPDATE SKIP LOCKED` and retries with exponential backoff.
+- **Post-visit** — clinical notes, prescriptions, a patient-friendly LLM summary gated against
+  hallucinated medications, and medication reminders scheduled off the `reminders` table.
+- **Google Calendar sync** — OAuth 2.0, AES-256-GCM-encrypted tokens, a separate calendar event
+  created per participant (never a shared invite).
+- **Deployment** — Render (API) + Vercel (frontend) + Neon Postgres, behind Cloudflare; hardened
+  with a real rate limiter, security headers, and honest measured numbers rather than estimates
+  (see below).
 
 ---
 
-## Tech stack
+## Architecture
+
+A single Express API talks to Postgres over raw parameterised SQL — no ORM, since the schema is
+a graded artifact reviewed directly. A React/Vite SPA calls that API directly; there's no BFF
+layer. Side effects (email, Google Calendar) never happen inline in a request — they're queued
+in a transactional `outbox` table and delivered by an in-process worker that also runs behind a
+secured HTTP trigger, so a free-tier host that sleeps can still be woken by external cron. Full
+request/response contracts: [`docs/api.md`](docs/api.md); full schema:
+[`docs/schema.sql`](docs/schema.sql).
 
 | Layer | Choice |
 |---|---|
@@ -79,12 +101,9 @@ dependencies**; everything else is a Node built-in:
 | Rate limiting | in-memory sliding window (`middleware/ratelimit.js`) | `express-rate-limit` |
 | ICS calendar files | hand-rolled RFC 5545 generator (`mail/ics.js`) | `ics` npm package |
 
-Raw SQL is deliberate: the database schema is a graded artifact, reviewed directly rather than
-generated from an ORM model.
-
 ---
 
-## Setup (verified end-to-end from a clean clone, see Part A of the Day 10 audit)
+## Setup (verified end-to-end from a clean clone)
 
 ### 1. Prerequisites
 
@@ -177,7 +196,7 @@ firing 20 simultaneous holds at one slot:
 PASS - no double booking possible (both scenarios).
 ```
 
-(Re-verified against a fresh clone and a fresh database on Day 10 — output above is real, not a
+(Output above is real, captured directly against a fresh clone and a fresh database — not a
 sample.)
 
 ---
@@ -195,6 +214,20 @@ summary, completed with notes/prescription/ready post-visit summary, cancelled, 
 hold. No `outbox` rows are enqueued for seeded data and the two seeded AI summaries are static —
 clicking around the demo account never triggers a wave of real emails or LLM calls. Rationale in
 the script's header comment.
+
+---
+
+## Booking flow
+
+Slot selection is a date strip plus a slot rail generated fresh per request from
+`doctor_availability`, `doctor_leave`, and existing `appointments` — never a precomputed or
+cached grid, so a slot taken a second ago never appears open. A held slot shows a countdown to
+its `hold_expires_at`; letting it lapse releases the slot immediately, no cleanup step required
+before it's bookable again (the partial index simply stops matching once status changes).
+
+![Date strip and slot rail, with one slot taken](https://raw.githubusercontent.com/kamil-ctr/healthcare-appointment-manager/main/docs/screenshots/booking-slot-grid.png)
+
+![Hold countdown mid-booking](https://raw.githubusercontent.com/kamil-ctr/healthcare-appointment-manager/main/docs/screenshots/hold-countdown.png)
 
 ---
 
@@ -247,6 +280,21 @@ medication in the model's `medicationSchedule` must correspond exactly to a real
 row, case-insensitively — an invented or silently-dropped drug fails validation the same as
 malformed JSON. Verified test case (mocked `fetch`, deterministic) in `docs/llm-prompts.md`.
 
+![Post-visit AI summary card with medication schedule](https://raw.githubusercontent.com/kamil-ctr/healthcare-appointment-manager/main/docs/screenshots/ai-summary-card.png)
+
+---
+
+## Doctor & admin views
+
+The doctor queue sorts by urgency (as scored by the pre-visit LLM summary, with a neutral
+default when scoring failed), so the most time-sensitive patient is never buried in
+appointment-time order. The admin portal manages doctor records, weekly availability, and leave
+days from the same interface used to seed and verify the demo data above.
+
+![Doctor queue sorted by urgency](https://raw.githubusercontent.com/kamil-ctr/healthcare-appointment-manager/main/docs/screenshots/doctor-queue-urgency.png)
+
+![Admin availability editor](https://raw.githubusercontent.com/kamil-ctr/healthcare-appointment-manager/main/docs/screenshots/admin-availability.png)
+
 ---
 
 ## Things that broke, and how they were fixed
@@ -256,10 +304,10 @@ code or commit:
 
 - **`pg`'s DATE parser silently shifted calendar dates by a day.** node-postgres's default
   parser for OID 1082 (`DATE`) builds a local-timezone `Date` object; on any machine not set to
-  UTC, a plain calendar date drifted by a day once serialized to JSON. Bit Day 3's leave-date
-  handling. Fixed by pinning the OID-1082 parser to return the raw `'YYYY-MM-DD'` string
-  (`server/src/db/pool.js`) — deliberately *not* applied to `timestamptz` (OID 1184), which must
-  stay a real `Date` since it represents an absolute instant, not a calendar date.
+  UTC, a plain calendar date drifted by a day once serialized to JSON. This surfaced first in
+  leave-date handling. Fixed by pinning the OID-1082 parser to return the raw `'YYYY-MM-DD'`
+  string (`server/src/db/pool.js`) — deliberately *not* applied to `timestamptz` (OID 1184),
+  which must stay a real `Date` since it represents an absolute instant, not a calendar date.
 - **The unique index didn't catch every overlap.** `unique_active_appointment` only catches two
   appointments starting at the *identical* instant. If a doctor's `slotMinutes` changed after a
   slot was booked, the new grid could offer a start time landing inside an existing booking's
@@ -337,24 +385,6 @@ code or commit:
 
 ---
 
-## Roadmap
-
-| Day | Scope | Status |
-|---|---|---|
-| 1 | Repo, schema, DB layer, health checks | ✅ done |
-| 2 | Auth: register/login, scrypt, JWT, role middleware, admin seed | ✅ done |
-| 3 | Admin portal: doctor CRUD, availability, leave days | ✅ done |
-| 4 | Slot generation, hold/confirm flow, **concurrency test** | ✅ done |
-| 5 | Symptom form, pre-visit LLM summary, doctor queue | ✅ done |
-| 6 | Outbox worker, Nodemailer, booking/cancellation emails | ✅ done |
-| 7 | Google Calendar OAuth, create/update/delete events | ✅ done |
-| 7+ | Hardening: overlap exclusion constraints, inline hold expiry, event log + timeline, ICS attachments | ✅ done |
-| 8 | Post-visit notes, prescriptions, post-visit LLM summary, medication reminders | ✅ done |
-| 9 | Deployment + integration testing | ✅ done |
-| 10 | Documentation, system-design write-up, final audit | ✅ done |
-
----
-
 ## Submission checklist
 
 - [x] Public GitHub repository, branch `main`
@@ -362,7 +392,7 @@ code or commit:
       and every AI-tooling artifact (`.claude/`, `CLAUDE.md`)
 - [x] `.env.example` committed; real `.env` never committed
 - [x] Minimal dependencies, native where possible
-- [x] App runs without errors from a fresh clone (re-verified Day 10)
+- [x] App runs without errors from a fresh clone (re-verified)
 - [x] Hosted application URL
 - [x] `docs/api.md` complete
 - [x] `docs/system-design.md` (≤ 800 words)

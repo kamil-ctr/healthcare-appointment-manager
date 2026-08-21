@@ -6,7 +6,7 @@
  * called from - never a request path, per the day-7 non-negotiable).
  *
  * Two-phase claim, deliberately NOT the "hold the transaction open across
- * the external call" pattern used for ai_summaries on day 5 - outbox has a
+ * the external call" pattern used for ai_summaries - outbox has a
  * real 'processing' status + locked_at for exactly this: claim a batch and
  * COMMIT quickly (phase 1), then act on each row outside any DB lock
  * (phase 2). SKIP LOCKED still guarantees two concurrent phase-1 claims
@@ -15,7 +15,7 @@
  * tick - only claimable again once locked_at is older than STALE_MINUTES
  * (a crashed worker). Each row gets at most one attempt per tick, since the
  * batch is claimed once up front, not reclaimed in a loop (the bug fixed
- * in ai-summaries on day 5).
+ * in ai-summaries).
  */
 import { one, query, withTransaction } from '../db/pool.js';
 import { sendMail } from '../mail/transport.js';
@@ -229,7 +229,7 @@ function eventBodyForRow(row) {
   const isPatient = row.userId === row.patientId;
   const chiefComplaint = row.summaryStatus === 'ready' ? row.summaryContent?.chiefComplaint : null;
   // doctorName already carries its own "Dr." (see mail/templates.js's
-  // leave_cancellation fix on day 6) - never prepend another one.
+  // leave_cancellation fix) - never prepend another one.
   const summary = isPatient
     ? `Appointment — ${row.doctorName} (${row.specialisation})`
     : `Appointment — ${row.patientName}`;

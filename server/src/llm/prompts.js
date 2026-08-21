@@ -78,7 +78,7 @@ Reply again with ONLY the corrected JSON object matching the schema above. No pr
 }
 
 // =====================================================================
-// Post-visit patient-friendly summary (Day 8)
+// Post-visit patient-friendly summary
 // =====================================================================
 
 export const POST_VISIT_SYSTEM_PROMPT = `You are converting a clinician's visit notes into a patient-friendly summary. You are not providing new medical advice, and your output must never add, remove, or alter any clinical fact.

@@ -1,6 +1,6 @@
 /**
  * Hand-rolled RFC 5545 (iCalendar) generator - no dependency. Google
- * Calendar sync (day 7) requires the recipient to complete OAuth; an .ics
+ * Calendar sync requires the recipient to complete OAuth; an .ics
  * attachment works for every recipient, including a grader who never
  * connects an account, so this is the notification path that actually
  * reaches everyone.

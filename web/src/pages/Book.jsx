@@ -8,7 +8,7 @@ import SymptomForm from '../components/SymptomForm.jsx';
 
 // NOT date.toISOString().slice(0, 10) - that converts to UTC first, which
 // silently shifts the calendar date by a day on any non-UTC-offset
-// timezone (the exact bug class caught server-side on Day 3/4 already).
+// timezone (the exact bug class already caught server-side elsewhere).
 // Local getters keep this the date the user actually sees on screen.
 function toISODate(date) {
   const y = date.getFullYear();

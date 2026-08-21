@@ -39,7 +39,7 @@ UTC comparison would silently miss it.
 
 Notifications are `outbox` rows in that same transaction, not sent inline. A recorded leave
 never exists without its notification, and a failed email/Google call can't roll back or
-block the leave - retrying is the outbox worker's job (day 6), not this request's.
+block the leave - retrying is the outbox worker's job, not this request's.
 
 Deleting a leave record does not un-cancel its appointments: patients were already told
 their slot is gone, and reviving it would contradict a notification already sent.
@@ -48,7 +48,7 @@ Re-booking, not un-cancelling, is the correct path back to a confirmed slot.
 ## 3. Slot hold mechanism
 
 Booking is two-phase - hold, then confirm - because a patient needs a window to fill in
-details (and, from day 5, a symptom form) before the slot is final. A single-phase
+details (and a symptom form) before the slot is final. A single-phase
 insert-and-done would either lock the slot forever on an abandoned form or force a
 mid-flow re-check, reopening the exact race the unique index exists to close.
 

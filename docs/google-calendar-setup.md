@@ -1,4 +1,4 @@
-# Google Calendar setup (Day 7)
+# Google Calendar setup
 
 How to provision a Google OAuth client for this app, and why the publishing status has to
 be **In production** rather than **Testing**.
@@ -115,8 +115,8 @@ call from the outbox worker), never logged, never returned to a client.
 ## Google Calendar: optional by design
 
 Nothing in the booking/confirm/cancel/reschedule request path calls Google - those routes
-only ever write `calendar`-topic `outbox` rows, exactly like the `email`-topic rows they've
-written since Day 6. The actual Google API calls happen only in the background worker
+only ever write `calendar`-topic `outbox` rows, exactly like the `email`-topic rows already
+in use. The actual Google API calls happen only in the background worker
 (`server/src/jobs/outbox.js`), on the same tick as email delivery. A user who never
 connects Google, or a deployment with no `GOOGLE_CLIENT_ID` configured at all, still gets
 a fully working appointment flow - the `calendar`-topic rows for that user simply

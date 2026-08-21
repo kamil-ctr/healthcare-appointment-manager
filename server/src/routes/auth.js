@@ -24,7 +24,7 @@ const USER_COLUMNS = `id, role, email, full_name AS "fullName", phone`;
 /**
  * Role is never read from the request body - every self-registration is a
  * patient. Admins and doctors are created via the admin seed script / the
- * admin portal (day 3), never through this public endpoint.
+ * admin portal, never through this public endpoint.
  */
 authRouter.post(
   '/register',

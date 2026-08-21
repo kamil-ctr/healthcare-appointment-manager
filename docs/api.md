@@ -564,6 +564,6 @@ not configured on this deployment).
 
 ## Planned routes
 
-None currently - Day 8 (visit notes, prescriptions, post-visit summary, medication reminders)
-closed the last functional requirement in the brief. Days 9-10 are deployment, integration
-testing, and documentation, not new endpoints.
+None currently - visit notes, prescriptions, the post-visit summary, and medication reminders
+close the last functional requirement in the brief. Deployment and documentation are the
+remaining work, not new endpoints.

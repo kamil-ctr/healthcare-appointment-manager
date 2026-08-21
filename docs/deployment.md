@@ -1,10 +1,10 @@
-# Deployment (Day 9)
+# Deployment
 
 Target stack, all free tiers: **Neon** (Postgres) + **Render** (API) + **Vercel** (frontend),
 with an external cron pinger keeping the Render instance warm and driving the background jobs.
 This document is written to be reproducible by someone who has never touched this repo before.
 
-**This deployment, as it actually stands** (verified end of Day 9):
+**This deployment, as it actually stands** (last verified):
 
 | Piece | Actual value |
 |---|---|

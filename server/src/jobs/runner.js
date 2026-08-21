@@ -2,7 +2,7 @@
  * Runs scheduled jobs both in-process (setInterval) AND on demand via
  * POST /api/internal/jobs/tick. Free hosting tiers sleep idle instances, so
  * an external cron pinger has to be able to drive the same work the
- * in-process timer would otherwise do. The Day 6 outbox worker plugs into
+ * in-process timer would otherwise do. The outbox worker plugs into
  * runJobs() the same way expireHolds() does - leave the seam.
  */
 import { timingSafeEqual } from 'node:crypto';

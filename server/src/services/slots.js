@@ -3,7 +3,7 @@
  * timezone - never UTC. The grouping key for each slot is the doctor's own
  * calendar date (the `day` value the expansion started from), never
  * re-derived from the resulting UTC instant, so a slot's local date can
- * never drift across a UTC day boundary the way Day 3's leave-date bug did.
+ * never drift across a UTC day boundary the way an earlier leave-date bug did.
  */
 import { many, one } from '../db/pool.js';
 import { badRequest, notFound } from '../lib/errors.js';

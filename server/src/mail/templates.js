@@ -6,8 +6,8 @@
  * timestamp. No images, no tracking pixels.
  *
  * Includes a fifth template, leave_cancellation_summary, alongside the four
- * from the brief - real rows of that event_type have been sitting in the
- * outbox since day 3 (the doctor's own notice that their leave cancelled N
+ * from the brief - real rows of that event_type reach the outbox from the
+ * leave cascade (the doctor's own notice that their leave cancelled N
  * appointments), and leaving that event_type unhandled would mean some
  * already-queued notifications never deliver.
  */

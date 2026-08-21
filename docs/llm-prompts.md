@@ -1,4 +1,4 @@
-# LLM prompts (Day 5 — pre-visit triage summary, Day 8 — post-visit summary)
+# LLM prompts (pre-visit triage summary, post-visit summary)
 
 Provider: **Groq**, OpenAI-compatible chat completions API
 (`https://api.groq.com/openai/v1/chat/completions`), called with native `fetch` from
@@ -172,7 +172,7 @@ part of the (irrelevant) symptom description and ignored.
 
 ---
 
-# Day 8 — post-visit patient-friendly summary
+# Post-visit patient-friendly summary
 
 Same provider, same client (`server/src/llm/client.js`), same call/validate/one-repair/give-up
 shape as pre-visit (`server/src/llm/post-visit.js` mirrors `pre-visit.js`). Prompt source:
