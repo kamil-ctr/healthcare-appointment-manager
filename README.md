@@ -5,13 +5,16 @@ Patients book slots and submit symptoms in advance; an LLM produces a pre-visit 
 urgency level for the doctor and a patient-friendly summary after the visit. Both sides are kept
 informed through email and Google Calendar.
 
-> **Live demo:** frontend at **<https://healthcare-appointment-manager-beta.vercel.app>**,
-> API at **<https://healthcare-appointment-manager-5olh.onrender.com>** (Render, Oregon/US
-> West + Vercel + Neon Postgres, Oregon). Deployment details, real settings, and every issue
-> hit getting here are in [`docs/deployment.md`](docs/deployment.md).
+## Live demo
 
-**Demo credentials** (seeded by `server/scripts/seed-demo.js`, all roles share one password -
-see [Seed data](#seed-data) below):
+- Frontend: **<https://healthcare-appointment-manager-beta.vercel.app>**
+- API: **<https://healthcare-appointment-manager-5olh.onrender.com>** (health check:
+  `/api/health`)
+
+Stack: Render (Oregon/US West) + Vercel + Neon Postgres (Oregon). Full deployment details, the
+real settings used, and every issue hit getting there: [`docs/deployment.md`](docs/deployment.md).
+
+**Demo credentials** (seeded by `server/scripts/seed-demo.js`, all roles share one password):
 
 | Role | Email | Password |
 |---|---|---|
@@ -22,52 +25,25 @@ see [Seed data](#seed-data) below):
 | Doctor | `dr.rohan.verma@demo.clinic.local` (Dermatology, 30-min slots, has a leave day) | `DemoPass123!` |
 | Patient | `patient.aisha@demo.local` / `patient.karan@demo.local` / `patient.neha@demo.local` | `DemoPass123!` |
 
-**Known limitations on the free tier — real numbers, not estimates:**
+---
 
-- **Cold start: 23.1 seconds**, measured as the actual first request after a genuine ~64-minute
-  idle period with no traffic at all. The external cron in `docs/deployment.md` §4 is *meant* to
-  ping the instance every 10 minutes so this never happens to a grader - but as documented in
-  that file's Troubleshooting section, the cron isn't currently firing (confirmed via 24 hours of
-  Render logs with zero hits on `/api/internal/jobs/tick`), so a grader arriving after any real
-  gap in traffic will very plausibly see this ~23s delay on their first request. Worth fixing
-  before this matters for a demo; see `docs/deployment.md` §4.
-- **Warm response time** for `GET /api/doctors/:id/slots`: averaged **~550ms** across 5 requests
-  (range 385-660ms) from an external test client - real internet round-trip to Oregon included,
-  not a same-region benchmark.
-- **Pre-visit LLM summary latency: 17 seconds** end to end, from symptom submission to the
-  summary being marked ready - timestamped via the appointment's own event log
-  (`GET /api/appointments/:id/events`), not a manual stopwatch.
-- **Email delivery is console-only in production right now** - no real SMTP credentials are set
-  on Render, so every confirmation/cancellation/reminder email (`.ics` attachment included) is
-  fully rendered and logged but never reaches an actual inbox. See `docs/deployment.md`
-  Troubleshooting, "Emails going to a console log."
-- The hand-rolled rate limiter (`server/src/middleware/ratelimit.js`) holds its state in memory,
-  so it is correct for this single-instance deploy but would need a shared store
-  (Postgres/Redis) to stay accurate across more than one instance - it also had to be re-keyed
-  off Cloudflare's `cf-connecting-ip` rather than Express's `req.ip`, since this deployment sits
-  behind two proxy hops (Cloudflare, then Render); see `docs/deployment.md` Troubleshooting.
-- Everything runs as one Render web service, so a crash restarts the whole API, not just one
-  worker.
+## How this was built
 
-> **Status:** Day 9 of 10, done — deployed to Neon + Render + Vercel and verified end to end: a
-> full smoke-test run, the rate limiter and security headers actually enforced in production (not
-> just locally - see `docs/deployment.md` Troubleshooting for the Cloudflare proxy-chain bug that
-> hid this), a real patient/doctor/admin walkthrough (booking, pre-visit summary, notes, post-visit
-> summary, leave cascade with email notification, Google Calendar connect/confirm/cancel), and
-> honest production numbers (23.1s cold start, ~550ms warm, 17s LLM latency - see "Known
-> limitations" above). Three credentials rotated after brief exposure during setup (Groq key,
-> Neon password, Google OAuth secret), all verified working post-rotation. Full account in
-> [`docs/deployment.md`](docs/deployment.md). Day 8 (previous) — post-visit notes, prescriptions, a patient-friendly post-visit
-> summary (LLM, with a hallucination gate on the medication schedule), and medication/follow-up
-> reminders close the last functional requirement in the brief. Day 7 (previous): Google
-> Calendar OAuth 2.0 (native fetch, no `googleapis` package), AES-256-GCM token encryption at
-> rest, transparent access-token refresh, and the calendar-topic outbox handler (create/update/
-> delete events, idempotent 404/410 handling, revoked-grant detection) - entirely optional,
-> nothing in the booking request path ever calls Google. Day 7 hardening pass: a GiST exclusion
-> constraint closing the overlap hole `unique_active_appointment` couldn't catch, inline
-> per-doctor stale-hold expiry, an append-only `appointment_events` audit log with a timeline
-> UI, and hand-rolled
-> RFC 5545 `.ics` calendar attachments. See [Roadmap](#roadmap) for what lands next.
+Ten days, one commit per day (see `git log --reverse` for the exact sequence and messages):
+
+| Day | Commit | Scope |
+|---|---|---|
+| 1 | `f775cc4` | Schema, config, DB layer, health checks, React shell |
+| 2 | `92a0975` | Auth: register/login, scrypt, JWT, role middleware |
+| 3 | `67752b8` | Admin portal: doctor CRUD, availability, leave cascade |
+| 4 | `3b87cb3` | Booking engine and patient frontend with design system |
+| 5 | `d437fe6` | Symptom capture and pre-visit LLM summary |
+| 6 | `2463c91` | Outbox worker and email delivery |
+| 7 | `db54ba8` | Google Calendar OAuth 2.0 integration |
+| 7+ | `f822fab` | Hardening: overlap exclusion constraints, inline hold expiry, event log, ICS |
+| 8 | `fafd18c` | Post-visit notes, prescriptions, post-visit summary, med reminders |
+| 9 | `2395666`…`1bad9e4` | Deployment (Neon+Render+Vercel), security-header/rate-limiter fixes, honest production numbers |
+| 10 | (this) | System design write-up, full README rewrite, reproducibility + submission audit |
 
 ---
 
@@ -85,8 +61,8 @@ see [Seed data](#seed-data) below):
 
 ### Dependency policy
 
-The submission guidelines ask for minimal, native dependencies. The backend therefore has
-**three runtime dependencies**, and everything else uses Node built-ins:
+The submission guidelines ask for minimal, native dependencies. The backend has **three runtime
+dependencies**; everything else is a Node built-in:
 
 | Need | Using | Instead of |
 |---|---|---|
@@ -96,207 +72,113 @@ The submission guidelines ask for minimal, native dependencies. The backend ther
 | Password hashing | `node:crypto` scrypt | `bcrypt` |
 | JWT sign/verify | `node:crypto` HMAC-SHA256 | `jsonwebtoken` |
 | Env loading | `node --env-file` | `dotenv` |
-| CORS | 15 lines in `middleware/core.js` | `cors` |
+| CORS | ~15 lines in `middleware/core.js` | `cors` |
 | HTTP client | global `fetch` | `axios`, `googleapis` |
 | Scheduling | interval loop + secured trigger endpoint | `node-cron`, BullMQ, Redis |
 | Data access | raw SQL | Prisma / Sequelize |
+| Rate limiting | in-memory sliding window (`middleware/ratelimit.js`) | `express-rate-limit` |
+| ICS calendar files | hand-rolled RFC 5545 generator (`mail/ics.js`) | `ics` npm package |
 
-Raw SQL is deliberate: the database schema is a graded artifact, so it is written and reviewed
-directly rather than generated from an ORM model.
-
----
-
-## Repository structure
-
-```
-healthcare-appointment-manager/
-├── README.md
-├── .gitignore
-├── .env.example              # template; the real .env is never committed
-├── docs/
-│   ├── schema.sql            # full PostgreSQL schema (idempotent)
-│   ├── api.md                # endpoint reference
-│   ├── llm-prompts.md        # exact prompts, schema, retry/give-up policy, injection guard
-│   └── system-design.md      # 800-word write-up (deliverable 4)
-├── server/
-│   ├── package.json
-│   ├── scripts/
-│   │   ├── concurrency-check.js   # proves the no-double-booking guarantee
-│   │   └── seed-admin.js          # idempotent admin seed
-│   └── src/
-│       ├── index.js          # entrypoint + graceful shutdown
-│       ├── app.js            # express wiring
-│       ├── config.js         # env loading, fail-fast validation
-│       ├── db/
-│       │   ├── pool.js       # pool, query helpers, withTransaction()
-│       │   └── migrate.js    # applies docs/schema.sql
-│       ├── lib/
-│       │   ├── errors.js     # AppError + typed helpers
-│       │   ├── password.js   # scrypt hash/verify
-│       │   ├── jwt.js        # hand-rolled HS256 sign/verify
-│       │   └── validate.js   # required/isEmail/minLength/oneOf/isDateString
-│       ├── llm/
-│       │   ├── client.js     # native-fetch Groq client, typed LlmError, timeout+retry
-│       │   ├── prompts.js    # versioned prompts, injection-guard sanitisation
-│       │   ├── parse.js      # strict output validation + post-visit hallucination gate
-│       │   ├── pre-visit.js  # orchestrates call -> validate -> one repair -> give up
-│       │   └── post-visit.js # same shape, post-visit patient-friendly summary
-│       ├── google/
-│       │   ├── crypto.js     # AES-256-GCM token encryption at rest (key from JWT_SECRET)
-│       │   ├── oauth.js      # connect/callback/disconnect/status, signed state param
-│       │   ├── tokens.js     # getAccessToken(): transparent refresh, revoked-grant handling
-│       │   └── calendar.js   # native-fetch Calendar REST client: create/patch/delete
-│       ├── mail/
-│       │   ├── transport.js  # one shared nodemailer transport, console fallback
-│       │   ├── templates.js  # plain-literal email templates, doctor-timezone rendering
-│       │   └── ics.js        # hand-rolled RFC 5545 .ics generator, no dependency
-│       ├── middleware/
-│       │   ├── core.js
-│       │   └── auth.js       # requireAuth, requireRole(...)
-│       ├── services/
-│       │   ├── doctors.js    # doctor CRUD, availability
-│       │   ├── leave.js      # leave + appointment-cancellation cascade
-│       │   ├── appointments.js  # hold/confirm/cancel/reschedule + reminder scheduling
-│       │   ├── slots.js
-│       │   ├── symptoms.js   # symptom form submission, pre-visit summary get/retry
-│       │   ├── notes.js      # visit notes/prescriptions submit+amend, post-visit summary get/retry
-│       │   ├── reminders.js  # medication/follow-up reminder expansion (FREQUENCY_TIMES)
-│       │   ├── queue.js      # doctor's urgency-sorted daily queue
-│       │   ├── notifications.js  # admin outbox listing + dead-letter retry
-│       │   └── events.js     # appointment_events append helper (logEvent, actor)
-│       ├── jobs/
-│       │   ├── runner.js
-│       │   ├── expire-holds.js
-│       │   ├── ai-summaries.js  # generatePendingSummaries(), one attempt per row per tick
-│       │   ├── reminders.js     # queueDueReminders(): reminders -> outbox
-│       │   └── outbox.js        # the delivery worker: claim, send, backoff, dead-letter
-│       └── routes/
-│           ├── health.js
-│           ├── auth.js
-│           ├── admin.js      # admin-only: doctors, availability, leave, outbox
-│           ├── doctors.js    # read-only, any authenticated role
-│           ├── appointments.js
-│           ├── doctor.js     # GET /api/doctor/queue
-│           ├── google.js     # OAuth connect/callback/disconnect/status (thin, calls google/)
-│           └── internal.js   # cron trigger
-└── web/
-    ├── package.json
-    ├── vite.config.js
-    ├── index.html
-    └── src/{main.jsx, App.jsx, api.js, styles.css, AuthContext.jsx, pages/, components/}
-```
+Raw SQL is deliberate: the database schema is a graded artifact, reviewed directly rather than
+generated from an ORM model.
 
 ---
 
-## Setup
+## Setup (verified end-to-end from a clean clone, see Part A of the Day 10 audit)
 
 ### 1. Prerequisites
 
 - Node.js **20.6 or newer** (`--env-file` support)
-- A PostgreSQL 13+ database — a free [Neon](https://neon.tech) or
-  [Supabase](https://supabase.com) instance works, or local Postgres
+- A PostgreSQL 13+ database — a free [Neon](https://neon.tech)/[Supabase](https://supabase.com)
+  instance or local Postgres both work
 
-### 2. Configure
+### 2. Configure the backend
 
 ```bash
-git clone https://github.com/<username>/healthcare-appointment-manager.git
+git clone https://github.com/kamil-ctr/healthcare-appointment-manager.git
 cd healthcare-appointment-manager
 cp .env.example server/.env
 ```
 
-Edit `server/.env` and set at minimum `DATABASE_URL` and `JWT_SECRET`.
-Generate a secret with:
+Edit `server/.env`: set `DATABASE_URL` and `JWT_SECRET` at minimum.
 
 ```bash
-node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"   # generate JWT_SECRET
 ```
 
-Set `DATABASE_SSL=false` for a local Postgres; leave it `true` for Neon/Supabase/Render.
+`DATABASE_SSL=false` for local Postgres; leave it `true` for Neon/Supabase/Render.
 
-### 3. Create the schema
+### 3. Install and migrate
 
 ```bash
 cd server
-npm install
+npm ci
 npm run migrate      # applies ../docs/schema.sql — safe to re-run
 ```
 
-Expected output: `[migrate] done. 14 tables present: ...`
+Expected: `[migrate] done. 14 tables present: ...`.
 
-Set `LLM_API_KEY` to a [Groq](https://console.groq.com) API key to enable the pre-visit
-summary (Day 5) - a blank key degrades gracefully (booking still works; the doctor sees the
-raw symptom form with a "Summary unavailable" retry button instead of a generated summary).
+`LLM_API_KEY` (a [Groq](https://console.groq.com) key) enables the pre-visit/post-visit
+summaries — a blank key degrades gracefully: booking and note submission still work, the UI
+falls back to the raw form with a "Summary unavailable" retry button.
 
-**SMTP (Day 6, optional).** Leave `SMTP_USER` blank and the app runs fully without any email
-setup: `server/src/mail/transport.js` falls back to a console transport that logs each
-rendered email to the server output and reports it as delivered, so the entire outbox flow -
-confirm a booking, run the worker, watch the row land on `'sent'` - works end to end on a
-fresh clone with zero configuration. To send real email with a Gmail account:
+**SMTP is optional.** Leave `SMTP_USER` blank and `server/src/mail/transport.js` falls back to
+a console transport — every email is fully rendered and logged, just not delivered, so the
+entire outbox flow (confirm → worker tick → row lands on `'sent'`) works with zero email
+configuration. To send real mail: turn on 2-Step Verification on a Gmail account, create an
+[App Password](https://myaccount.google.com/apppasswords), set `SMTP_HOST=smtp.gmail.com`,
+`SMTP_PORT=587`, `SMTP_USER`/`SMTP_PASS`, `MAIL_FROM`.
 
-1. Turn on 2-Step Verification on the Google account.
-2. Create an [App Password](https://myaccount.google.com/apppasswords) (Mail, any device name).
-3. Set in `server/.env`:
-   ```
-   SMTP_HOST=smtp.gmail.com
-   SMTP_PORT=587
-   SMTP_USER=you@gmail.com
-   SMTP_PASS=<the 16-character app password, no spaces>
-   MAIL_FROM=Clinic <you@gmail.com>
-   ```
+**Google Calendar is optional.** Leave `GOOGLE_CLIENT_ID` blank and everything else is
+unaffected — `GET /api/google/connect` responds `503` instead of a broken auth URL. Full Console
+setup, and why publishing status must be **In production** not **Testing**, is in
+[`docs/google-calendar-setup.md`](docs/google-calendar-setup.md).
 
-Any other SMTP provider works the same way - just set `SMTP_HOST`/`SMTP_PORT` accordingly.
-
-**Google Calendar (Day 7, optional).** Leave `GOOGLE_CLIENT_ID` blank and everything still
-works - booking, confirming, cancelling, rescheduling are all identical for a user who
-never connects Google; `GET /api/google/connect` just responds `503` instead of building a
-broken authorization URL. Full Console setup (project, OAuth consent screen, **why
-publishing status must be "In production" and not "Testing"** - Testing expires refresh
-tokens after 7 days, which would kill a demo judged weeks later - scope, redirect URIs) is
-in [`docs/google-calendar-setup.md`](docs/google-calendar-setup.md). Once you have a
-client id/secret:
-```
-GOOGLE_CLIENT_ID=<from the Console>
-GOOGLE_CLIENT_SECRET=<from the Console>
-GOOGLE_REDIRECT_URI=http://localhost:4000/api/google/callback
-```
-
-### 4. Configure the frontend
+### 4. Configure and run the frontend
 
 ```bash
-cp web/.env.example web/.env
+cp web/.env.example web/.env       # already ships with the repo; VITE_API_URL defaults to :4000
+cd web && npm ci
 ```
-
-`VITE_API_URL` defaults to `http://localhost:4000` for local dev; point it at the deployed
-backend URL in production.
-
-### 5. Run
 
 ```bash
-# terminal 1 — API on http://localhost:4000
-cd server && npm run dev
+# terminal 1
+cd server && npm run dev      # http://localhost:4000
 
-# terminal 2 — UI on http://localhost:5173
-cd web && npm install && npm run dev
+# terminal 2
+cd web && npm run dev         # http://localhost:5173 (Vite auto-picks the next free port if taken)
 ```
 
-Open <http://localhost:5173>. Both checks on the page should read green.
+Open the printed URL — the homepage renders the booking flow directly (`Find a doctor` /
+`Sign in` / `Register`); nothing further to check on load.
 
-### 6. Verify the concurrency guarantee
+### 5. Verify the concurrency guarantee
 
 ```bash
 cd server && node --env-file=.env scripts/concurrency-check.js
 ```
 
-Fires 20 simultaneous booking attempts at one slot and asserts that exactly one wins:
+Runs **two** scenarios — direct SQL inserts, then real HTTP against a running server — each
+firing 20 simultaneous holds at one slot:
 
 ```
-[test] succeeded        : 1   (expected 1)
-[test] 23505 conflicts  : 19  (expected 19)
-[test] unexpected errors: 0   (expected 0)
-[test] rows in DB       : 1   (expected 1)
+=== Scenario 1: direct SQL, 20 concurrent INSERTs ===
+[sql] succeeded        : 1   (expected 1)
+[sql] 23505 conflicts  : 19   (expected 19)
+[sql] rows in DB       : 1   (expected 1)
+[sql] PASS - no double booking possible.
 
-PASS - no double booking possible.
+=== Scenario 2: real HTTP, 20 concurrent POST /api/appointments/hold ===
+[http] 201 succeeded      : 1   (expected 1)
+[http] 409 SLOT_TAKEN     : 19   (expected 19)
+[http] rows in DB         : 1   (expected 1)
+[http] PASS - no double booking possible.
+
+PASS - no double booking possible (both scenarios).
 ```
+
+(Re-verified against a fresh clone and a fresh database on Day 10 — output above is real, not a
+sample.)
 
 ---
 
@@ -306,148 +188,152 @@ PASS - no double booking possible.
 cd server && ALLOW_DEMO_SEED=true node scripts/seed-demo.js
 ```
 
-Refuses to run without `ALLOW_DEMO_SEED=true`, so it can never fire by accident. Idempotent - a
-second run is a no-op that reports the existing counts instead of duplicating anything. Creates 1
-admin, 4 doctors (different specialisations, slot lengths of 20/30/45 minutes, one with a leave
-day next week), 3 patients, and 4 appointments spanning every interesting state: confirmed
-upcoming with a ready pre-visit summary, completed with notes/a prescription/a ready post-visit
-summary, cancelled, and an expired hold. Credentials are listed near the top of this README.
-
-**No outbox rows are enqueued for any seeded row** - appointments are inserted directly, not
-through the hold/confirm/cancel service functions that write `outbox` rows as part of the
-business transaction, and the two seeded AI summaries are static pre-written content, not a live
-model call. A grader clicking around the demo account will not trigger a wave of emails or LLM
-calls on the next job tick. Full rationale in the script's header comment
-(`server/scripts/seed-demo.js`).
-
----
-
-## Health endpoints
-
-| Method | Path | Purpose |
-|---|---|---|
-| `GET` | `/api/health` | Liveness. Responds even if the database is down. |
-| `GET` | `/api/health/db` | Readiness. Round-trips to Postgres, returns latency and pool stats. `503` if unreachable. |
+Refuses to run without `ALLOW_DEMO_SEED=true`. Idempotent — a second run reports existing counts
+instead of duplicating. Creates 1 admin, 4 doctors (20/30/45-min slots, one with a leave day), 3
+patients, and 4 appointments spanning every state: confirmed upcoming with a ready pre-visit
+summary, completed with notes/prescription/ready post-visit summary, cancelled, and an expired
+hold. No `outbox` rows are enqueued for seeded data and the two seeded AI summaries are static —
+clicking around the demo account never triggers a wave of real emails or LLM calls. Rationale in
+the script's header comment.
 
 ---
 
 ## Database design
 
-Full DDL with commentary in [`docs/schema.sql`](docs/schema.sql). Fourteen tables:
+Full DDL with commentary: [`docs/schema.sql`](docs/schema.sql). Fourteen tables. Three decisions
+carry most of the design — full write-up in [`docs/system-design.md`](docs/system-design.md):
 
-`users` · `doctors` · `doctor_availability` · `doctor_leave` · `appointments` ·
-`appointment_events` · `symptom_forms` · `visit_notes` · `prescriptions` · `ai_summaries` ·
-`reminders` · `outbox` · `google_accounts` · `calendar_events`
+**1. Concurrency is a database invariant, not a read-then-write check.**
+`unique_active_appointment` is a partial unique index on `appointments (doctor_id, starts_at)
+WHERE status IN ('held','confirmed')` — two concurrent requests for the same slot produce one row
+and one `23505`, mapped to `409 SLOT_TAKEN`. It only catches the *identical-instant* case; a
+second invariant, the GiST exclusion constraint `appointments_no_overlap`, closes the general
+overlap case (relevant when a doctor's `slotMinutes` changes after a slot is booked — see the bug
+list below). An advisory lock per doctor was considered and rejected: it would serialize every
+booking attempt for that doctor, where the exclusion constraint lets concurrent attempts run in
+parallel and rejects only the actual loser.
 
-Three decisions carry most of the design:
+**2. Every outbound side effect goes through a transactional `outbox`.** Email and calendar rows
+are inserted in the *same transaction* as the business change — a confirmed booking can never
+exist without its pending notification, and a failed SMTP/Google call can never roll back the
+booking. A worker claims rows with `FOR UPDATE SKIP LOCKED`, retries with exponential backoff
+(~1m/5m/15m/1h/6h + jitter) up to `max_attempts`, then dead-letters for an admin to retry
+deliberately (`POST /api/admin/outbox/:id/retry`) — never a naive send-then-hope inline call.
 
-**1. Concurrency is enforced by Postgres, not by application code.**
-
-```sql
-CREATE UNIQUE INDEX unique_active_appointment
-  ON appointments (doctor_id, starts_at)
-  WHERE status IN ('held', 'confirmed');
-```
-
-Two simultaneous requests for the same slot produce one row and one `23505` unique violation,
-which the API maps to `409 CONFLICT`. Because cancelled and expired rows fall outside the partial
-index, a freed slot becomes bookable again immediately.
-
-That index only catches two appointments starting at the *identical* instant, not general
-overlap - a doctor's `slotMinutes` changing after a slot is booked can otherwise offer a new
-start time that lands inside an existing appointment's window. A GiST exclusion constraint,
-`appointments_no_overlap`, closes that hole as a second database invariant (`23P01`, also
-mapped to `409 SLOT_TAKEN`); the same pattern is applied to `doctor_availability` so
-overlapping weekly blocks are rejected at the database level too. An advisory lock per doctor
-was considered and rejected here: it would serialise every booking attempt for that doctor one
-at a time, while the exclusion constraint lets concurrent attempts run fully in parallel and
-rejects only the actual loser.
-
-**2. Every outbound side effect goes through a transactional `outbox`.**
-
-Email and calendar rows are inserted in the *same transaction* as the business change. A confirmed
-booking can never exist without its pending notification, and a failed SMTP or Google call can
-never roll back a booking. A worker claims due rows with `FOR UPDATE SKIP LOCKED`, marks them
-`'processing'`, and retries failures with exponential backoff (~1m, 5m, 15m, 1h, 6h, with jitter)
-up to `max_attempts`, after which a row becomes a `'failed'` dead letter an admin retries
-deliberately (`/admin/notifications`) rather than something the worker keeps hammering on its
-own. `email`-topic rows go through Nodemailer today; `calendar`-topic rows are left untouched
-for Day 7. Full write-up: `docs/system-design.md` §4.
-
-`reminders` holds the *schedule* (what is due, when); `outbox` holds the *delivery* (how it is
-sent, with retries). The background job moves work from one to the other - confirming an
-appointment schedules a 24h and a 2h reminder for the patient; cancelling, rescheduling, or a
-leave cascade cancels any of those still `'scheduled'`, so a cancelled appointment never reminds.
-
-**3. Google OAuth credentials live in `google_accounts`, never on `users`.**
-
-Tokens, expiry, scope, and `calendar_id` are isolated, so a user can connect or disconnect
-Calendar without touching their login - both `access_token` and `refresh_token` are
-encrypted at rest (AES-256-GCM, key derived from `JWT_SECRET`; see
-`docs/google-calendar-setup.md`). `calendar_events` maps each appointment to the Google event
-id **per user**, which is what makes update-on-reschedule and delete-on-cancel possible for both
-patient and doctor - a *separate* event on each participant's own calendar, never one event with
-the other party invited as an attendee (avoids Google's own invitation emails, avoids attendee
-permission problems on personal accounts, and keeps the two calendars' lifecycles independent).
-Calendar is entirely optional: nothing in the booking/confirm/cancel/reschedule request path
-ever calls Google - only the outbox worker does, on its own tick, and a user who never connects
-just gets `calendar`-topic rows that dead-letter immediately as `google_not_connected`.
-
-**4. Every appointment's history is auditable, and every confirmation/cancellation carries a
-calendar file that works without Google.**
-
-`appointment_events` is an append-only log (`held`, `symptoms_submitted`, `confirmed`,
-`cancelled_by_*`, `expired`, `rescheduled`, `summary_ready`/`summary_failed`, `email_sent`,
-`calendar_event_created`/`_deleted`) written in the same transaction as the change itself, never
-after - `GET /api/appointments/:id/events` renders it as a timeline on the appointment detail
-page, which is what makes the leave cascade and hold expiry independently verifiable instead of
-only asserted. Separately, `server/src/mail/ics.js` hand-rolls an RFC 5545 `.ics` file (no
-dependency) attached to booking-confirmation, cancellation, and leave-cancellation emails.
-Google Calendar sync requires the recipient to complete OAuth first, so an ICS attachment is the
-only notification path that reaches *every* recipient - including a grader who never connects an
-account - which is why it exists alongside, not instead of, the Day 7 integration.
+**3. Google OAuth credentials live in `google_accounts`, never on `users`.** Tokens are
+encrypted at rest (AES-256-GCM, key derived from `JWT_SECRET`). `calendar_events` maps each
+appointment to the Google event id **per user** — a *separate* event on each participant's own
+calendar, never one event with the other party invited as an attendee. That was a deliberate
+choice over the simpler single-shared-event design: an attendee-based event triggers Google's own
+invitation emails, hits attendee-permission problems on personal accounts, and couples the two
+calendars' lifecycles together (a reschedule or cancel on one side would have to reach into the
+other's event). Separate events per participant avoid all three, at the cost of one extra API
+call per side.
 
 ---
 
 ## LLM: pre-visit triage and post-visit summaries
 
-Full prompts, JSON schemas, validation rules, retry/give-up policy, and the prompt-injection
-guard (with verified real test cases) are documented in
-[`docs/llm-prompts.md`](docs/llm-prompts.md). The short version: the model is never called
-inside a request handler (`POST /api/appointments/:id/symptoms` only inserts a `pending`
-`ai_summaries` row, same for `POST/PATCH /api/appointments/:id/notes`), confirming an
-appointment never depends on the pre-visit summary being ready, and every failure mode -
-timeout, missing/invalid key, rate limit, malformed output surviving one repair attempt -
-degrades to a `failed` row with the raw symptom form (or, post-visit, the raw clinical notes
-and real prescription list) still fully visible, never a crash or a blocked write.
+Full prompts, JSON schemas, retry/give-up policy, and the prompt-injection guard (with verified
+real test cases) are in [`docs/llm-prompts.md`](docs/llm-prompts.md). The model is never called
+inside a request handler — `POST /api/appointments/:id/symptoms` only inserts a `pending`
+`ai_summaries` row, confirming an appointment never depends on the summary being ready. Every
+failure mode (timeout, missing key, rate limit, malformed output surviving one repair attempt)
+degrades to a `failed` row with the raw form still fully visible, never a crash or a blocked
+write.
 
-The post-visit summary (Day 8) adds a hard **hallucination gate**
-(`server/src/llm/parse.js`): every medication in the model's `medicationSchedule` must
-correspond exactly to a real `prescriptions` row for that appointment, case-insensitively - an
-invented drug or a silently-dropped one fails validation just like malformed JSON, triggers the
-same one-repair-then-give-up policy, and ends the row `'failed'` rather than shipping a
-patient-facing summary that could be wrong about their own medication. Verified test case (fetch
-mocked to force the failure deterministically) in `docs/llm-prompts.md`.
+The post-visit summary adds a hard **hallucination gate** (`server/src/llm/parse.js`): every
+medication in the model's `medicationSchedule` must correspond exactly to a real `prescriptions`
+row, case-insensitively — an invented or silently-dropped drug fails validation the same as
+malformed JSON. Verified test case (mocked `fetch`, deterministic) in `docs/llm-prompts.md`.
 
-**Medication reminder scheduling** (`server/src/services/reminders.js`) expands each
-prescription into individual `reminders` rows, starting the day after the visit and running for
-`durationDays`, at times of day (in the **doctor's** timezone) fixed by `frequencyPerDay`:
+---
 
-| Times/day | Schedule (local time) |
+## Things that broke, and how they were fixed
+
+Real bugs found during development and deployment, each verifiable by reading the referenced
+code or commit:
+
+- **`pg`'s DATE parser silently shifted calendar dates by a day.** node-postgres's default
+  parser for OID 1082 (`DATE`) builds a local-timezone `Date` object; on any machine not set to
+  UTC, a plain calendar date drifted by a day once serialized to JSON. Bit Day 3's leave-date
+  handling. Fixed by pinning the OID-1082 parser to return the raw `'YYYY-MM-DD'` string
+  (`server/src/db/pool.js`) — deliberately *not* applied to `timestamptz` (OID 1184), which must
+  stay a real `Date` since it represents an absolute instant, not a calendar date.
+- **The unique index didn't catch every overlap.** `unique_active_appointment` only catches two
+  appointments starting at the *identical* instant. If a doctor's `slotMinutes` changed after a
+  slot was booked, the new grid could offer a start time landing inside an existing booking's
+  window without ever colliding on `starts_at`. Closed with a second, independent database
+  invariant — the GiST exclusion constraint `appointments_no_overlap` (`docs/schema.sql`) — rather
+  than trying to make the first index smarter.
+- **A single job tick could burn all of a summary's retry attempts at once.** `ai_summaries` has
+  no `next_retry_at`/`processing` column, so a row that just failed becomes immediately
+  re-eligible by status alone — an early version of the claim loop could re-claim the same row
+  it had just failed, repeatedly, inside one tick, exhausting `MAX_ATTEMPTS` before a single real
+  retry interval had passed. Fixed with an `excludeIds` list per tick
+  (`server/src/jobs/ai-summaries.js`) so a row gets at most one attempt per tick — the tick
+  interval itself becomes the backoff.
+- **The rate limiter never triggered in production.** Verified working locally, but 35 rapid
+  requests against the deployed API returned zero `429`s. This deployment sits behind two proxy
+  hops — Cloudflare, then Render's own edge — but `app.set('trust proxy', 1)` only accounted for
+  one, so Express's `req.ip` resolved to Render's inner edge address, not the real client. Fixed
+  by keying the limiter off Cloudflare's `cf-connecting-ip` header instead
+  (`server/src/middleware/ratelimit.js`), which a client can't override. Full writeup:
+  `docs/deployment.md` Troubleshooting.
+- **`GOOGLE_REDIRECT_URI` on Render pointed at `localhost` in production.** Left at its local-dev
+  default after the first deploy, even though the correct URI was already registered in Google
+  Cloud Console — would have failed every Calendar connect attempt with `redirect_uri_mismatch`.
+  Caught by re-reading the actual env var value rather than assuming it matched the docs.
+- **Missing `openid`/`email` OAuth scope meant the connected account's email never displayed.**
+  The scope originally requested only `calendar.events`, so Google never returned an `id_token`
+  — nothing to decode the address from. Fixed by adding `openid email` (`server/src/google/
+  oauth.js`) — both non-sensitive scopes, zero extra calendar access, no verification requirement.
+- **Vercel had no SPA rewrite, then no Git connection at all.** The original CLI-only deploy had
+  no `vercel.json`, so a direct load of any client-routed path other than `/` (e.g.
+  `/appointments`) 404'd on refresh — Vercel's static host has no server-side route for it
+  without an explicit rewrite. Fixed by committing `web/vercel.json` with a
+  `/(.*) → /index.html` rewrite. Separately, the project had never been connected to Git at all
+  (deployed by hand via `vercel --prod`), so a same-day frontend fix silently never went live
+  until the gap was noticed and Git integration was connected — see `docs/deployment.md`.
+- **Neon was provisioned in the wrong region, twice.** First attempt used a default region an
+  ocean away from Render's host; every query paid a trans-Pacific round trip. Re-provisioned in
+  **Oregon** to match Render's own region (confirmed in Render's Settings → Region) — `GET
+  /api/health/db` now reports 2-4ms round trips instead of 150-250ms+.
+
+---
+
+## Known limitations on the free tier — real numbers, not estimates
+
+- **Cold start: 23.1 seconds**, measured as the actual first request after a genuine ~64-minute
+  idle period. An external cron is meant to ping the instance every 10 minutes so this never
+  happens to a grader, but as of writing it isn't firing (zero hits on `/api/internal/jobs/tick`
+  in 24 hours of logs) — see `docs/deployment.md` §4.
+- **Warm response time** for `GET /api/doctors/:id/slots`: ~550ms average across 5 requests
+  (385-660ms range) from an external client, real internet round-trip to Oregon included.
+- **Pre-visit LLM summary latency: 17 seconds** end to end, timestamped via the appointment's own
+  event log, not a stopwatch guess.
+- **Email delivery is console-only in production** — no real SMTP credentials are set on Render,
+  so every email (`.ics` attachment included) is fully rendered and logged but not delivered to
+  an inbox. See `docs/deployment.md` Troubleshooting.
+- The in-memory rate limiter is correct for this single Render instance but would need a shared
+  store (Postgres/Redis) across more than one.
+- Everything runs as one Render web service — a crash restarts the whole API, not just one
+  worker.
+
+---
+
+## Where to look (grader's guide)
+
+| Evaluation focus | Files / docs |
 |---|---|
-| 1 | 09:00 |
-| 2 | 09:00, 21:00 |
-| 3 | 08:00, 14:00, 20:00 |
-| 4 | 08:00, 12:00, 16:00, 20:00 |
-| 5 | 08:00, 11:30, 15:00, 18:30, 22:00 |
-| 6 | 08:00, 10:48, 13:36, 16:24, 19:12, 22:00 |
-
-(5 and 6 are evenly spaced across the 08:00-22:00 window.) Rows already in the past are skipped
-(relevant when notes are entered late in the day), and the total is capped at 400 per appointment
-- a prescription that would exceed the cap is clamped, with the clamp recorded in the API
-response rather than silently dropped. Amending notes (`PATCH .../notes`) cancels every
-still-`'scheduled'` reminder before rescheduling against the new prescriptions, so a superseded
-dose can never fire.
+| Slot conflicts / concurrency | `docs/schema.sql` (`unique_active_appointment`, `appointments_no_overlap`), `server/src/services/appointments.js`, `server/scripts/concurrency-check.js`, `docs/system-design.md` §1 |
+| Doctor-leave handling | `server/src/services/leave.js`, `docs/api.md` (`POST /api/admin/doctors/:id/leave`), `docs/system-design.md` §2 |
+| Notification reliability | `docs/schema.sql` (`outbox`, `reminders`), `server/src/jobs/outbox.js`, `docs/system-design.md` §4, `docs/api.md` (`POST /api/internal/jobs/tick`) |
+| LLM prompt quality and failure handling | `docs/llm-prompts.md` (full prompts, injection-guard test case, hallucination-gate test case), `server/src/llm/` |
+| Database schema | `docs/schema.sql` (idempotent, fully commented) |
+| API design | `docs/api.md` (every route, every error code) |
+| Email / calendar integration | `server/src/mail/`, `server/src/google/`, `docs/google-calendar-setup.md`, README "Database design" §3 |
+| Documentation | this file, `docs/system-design.md` (≤800 words), `docs/deployment.md` (real production account) |
 
 ---
 
@@ -465,18 +351,19 @@ dose can never fire.
 | 7+ | Hardening: overlap exclusion constraints, inline hold expiry, event log + timeline, ICS attachments | ✅ done |
 | 8 | Post-visit notes, prescriptions, post-visit LLM summary, medication reminders | ✅ done |
 | 9 | Deployment + integration testing | ✅ done |
-| 10 | Documentation, system-design write-up, final audit | |
+| 10 | Documentation, system-design write-up, final audit | ✅ done |
 
 ---
 
 ## Submission checklist
 
 - [x] Public GitHub repository, branch `main`
-- [x] `.gitignore` excludes `node_modules/`, `.env`, build artifacts, `.vscode/`, `.idea/`
+- [x] `.gitignore` excludes `node_modules/`, `.env`, build artifacts, `.vscode/`, `.idea/`,
+      and every AI-tooling artifact (`.claude/`, `CLAUDE.md`)
 - [x] `.env.example` committed; real `.env` never committed
 - [x] Minimal dependencies, native where possible
-- [x] App runs without errors from a fresh clone
+- [x] App runs without errors from a fresh clone (re-verified Day 10)
 - [x] Hosted application URL
-- [ ] `docs/api.md` complete
-- [ ] `docs/system-design.md` (≤ 800 words)
-- [ ] Zip export of the clean clone
+- [x] `docs/api.md` complete
+- [x] `docs/system-design.md` (≤ 800 words)
+- [ ] Zip export of the clean clone — not applicable to a GitHub submission

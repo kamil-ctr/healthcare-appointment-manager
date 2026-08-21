@@ -1,7 +1,6 @@
 # System Design Write-up
 
-> Deliverable 4 — 800 words max. Drafted incrementally; finalised on day 10.
-> Current draft: ~750 words.
+> Deliverable 4 — 800 words max.
 
 ## 1. Double-booking prevention
 
@@ -53,19 +52,22 @@ details (and, from day 5, a symptom form) before the slot is final. A single-pha
 insert-and-done would either lock the slot forever on an abandoned form or force a
 mid-flow re-check, reopening the exact race the unique index exists to close.
 
-`hold_expires_at` lives on the `appointments` row, not in memory or Redis, because that row
-is already the source of truth for slot ownership: `unique_active_appointment`
-(`WHERE status IN ('held','confirmed')`) has to know a hold's deadline to decide if it's
-still active. An in-memory timer drifts across restarts and vanishes on a crash; a Redis
-TTL would need to stay consistent with the row across two systems for no real benefit.
+`hold_expires_at` lives on the `appointments` row, not in memory or Redis - that row is
+already the source of truth for slot ownership, and an in-memory timer or Redis TTL would
+just be a second system that has to stay consistent with it for no real benefit.
 
 Because the index is partial, an expired or cancelled appointment simply stops matching
 its `WHERE` clause the instant its status changes - bookable again immediately, no cleanup.
 
-The sweep (`status='held' AND hold_expires_at < now()` -> `'expired'`) runs both on an
-in-process interval and behind `POST /api/internal/jobs/tick`, guarded by a shared secret,
-so a free-tier host that sleeps idle instances can still be driven by an external cron
-pinger hitting the same endpoint.
+The periodic sweep (`status='held' AND hold_expires_at < now()` -> `'expired'`) only runs
+once a tick, so a dead hold can look taken for up to a minute after it actually expired.
+`holdAppointment`/`rescheduleAppointment` also run an inline sweep first, scoped to just
+that one doctor, inside the same transaction as the new insert - a patient booking right
+after someone else's hold died is never blocked by a row the periodic sweep hasn't reached
+yet. The periodic sweep remains backstop hygiene for doctors nobody is actively booking
+against, running both on an in-process interval and behind `POST /api/internal/jobs/tick`,
+shared-secret guarded, so a free-tier host that sleeps idle instances can still be driven
+by an external cron pinger.
 
 ## 4. Notification failure handling
 
