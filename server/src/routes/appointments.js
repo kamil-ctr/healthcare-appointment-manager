@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { asyncHandler } from '../lib/errors.js';
 import { required } from '../lib/validate.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
+import { rateLimit } from '../middleware/ratelimit.js';
 import {
   holdAppointment,
   confirmAppointment,
@@ -29,6 +30,7 @@ appointmentsRouter.use(requireAuth);
 appointmentsRouter.post(
   '/hold',
   requireRole('patient'),
+  rateLimit('hold', 30),
   asyncHandler(async (req, res) => {
     const body = req.body ?? {};
     required(body, ['doctorId', 'startsAt']);

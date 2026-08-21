@@ -11,6 +11,7 @@ import {
   cors,
   requestId,
   accessLog,
+  securityHeaders,
   notFoundHandler,
   errorHandler,
 } from './middleware/core.js';
@@ -22,6 +23,7 @@ export function createApp() {
   app.set('trust proxy', 1); // behind Render/Railway TLS termination
 
   app.use(requestId);
+  app.use(securityHeaders);
   app.use(cors);
   app.use(express.json({ limit: '256kb' }));
   app.use(accessLog);

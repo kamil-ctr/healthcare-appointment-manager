@@ -5,6 +5,7 @@ import { required, isEmail, minLength } from '../lib/validate.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
 import { signToken } from '../lib/jwt.js';
 import { requireAuth } from '../middleware/auth.js';
+import { rateLimit } from '../middleware/ratelimit.js';
 
 export const authRouter = Router();
 
@@ -27,6 +28,7 @@ const USER_COLUMNS = `id, role, email, full_name AS "fullName", phone`;
  */
 authRouter.post(
   '/register',
+  rateLimit('register', 30),
   asyncHandler(async (req, res) => {
     const { email, password, fullName, phone } = req.body ?? {};
     required(req.body ?? {}, ['email', 'password', 'fullName']);
@@ -58,6 +60,7 @@ authRouter.post(
 
 authRouter.post(
   '/login',
+  rateLimit('login', 30),
   asyncHandler(async (req, res) => {
     const { email, password } = req.body ?? {};
     required(req.body ?? {}, ['email', 'password']);

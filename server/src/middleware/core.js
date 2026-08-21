@@ -20,6 +20,19 @@ export function cors(req, res, next) {
   return next();
 }
 
+/**
+ * Hand-set security headers - no helmet dependency. This is a pure JSON
+ * API (no HTML rendered, no inline scripts to allow), so the header list
+ * is short and deliberate rather than a copied preset.
+ */
+export function securityHeaders(req, res, next) {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'geolocation=(), camera=(), microphone=()');
+  next();
+}
+
 /** Tags every request so a log line can be traced to a client response. */
 export function requestId(req, res, next) {
   req.id = req.headers['x-request-id'] || randomUUID();

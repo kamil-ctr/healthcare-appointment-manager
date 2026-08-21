@@ -12,7 +12,9 @@
     "dev": "node --watch --env-file=.env src/index.js",
     "migrate": "node --env-file=.env src/db/migrate.js",
     "migrate:prod": "node src/db/migrate.js",
-    "seed:admin": "node --env-file=.env scripts/seed-admin.js"
+    "seed:admin": "node --env-file=.env scripts/seed-admin.js",
+    "seed:demo": "node --env-file=.env scripts/seed-demo.js",
+    "smoke-test": "node --env-file=.env scripts/smoke-test.js"
   },
   "dependencies": {
     "express": "^4.21.2",

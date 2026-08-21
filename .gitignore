@@ -17,6 +17,7 @@ build/
 out/
 .next/
 .vite/
+.vercel/
 
 # editor / OS
 .vscode/
@@ -34,3 +35,6 @@ logs/
 *.log
 npm-debug.log*
 coverage/
+.env.production
+.env.*
+!.env.example
