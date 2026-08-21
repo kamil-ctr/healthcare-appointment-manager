@@ -3,6 +3,22 @@
 How to provision a Google OAuth client for this app, and why the publishing status has to
 be **In production** rather than **Testing**.
 
+**Provisioned and verified for this deployment.** The steps below were followed against a
+real Google Cloud project and OAuth client, created directly in the Console (not by this
+codebase or any script). Current state:
+
+- Publishing status: **In production** (not Testing - see §4 for why that matters).
+- Authorized redirect URIs registered on the OAuth client: `http://localhost:4000/api/google/callback`
+  (local dev) and `https://healthcare-appointment-manager-5olh.onrender.com/api/google/callback`
+  (Render). `GOOGLE_REDIRECT_URI` is set to the matching value in each environment (`server/.env`
+  locally, a Render environment variable in production) - see §7.
+- Authorized JavaScript origin: `https://healthcare-appointment-manager-beta.vercel.app` (Vercel).
+- End-to-end connect flow verified in a real browser against the production deployment: connect
+  as both a patient and a doctor (same underlying scopes, separate `google_accounts` rows),
+  confirming an appointment creates one event on each side's own calendar (never a shared
+  invite), and cancelling removes both events. The "unverified app" interstitial (§4) appears
+  as expected and is a one-time click, not a blocker.
+
 ---
 
 ## 1. Create a project
@@ -20,8 +36,8 @@ be **In production** rather than **Testing**.
 
 - User type: **External** → Create.
 - App name / support email / developer contact: anything reachable by you.
-- Save through Scopes and Test users without adding anything (the app requests its one
-  scope at runtime, not here) to the summary page.
+- Save through Scopes and Test users without adding anything (the app requests its scopes
+  at runtime, not here - see §6) to the summary page.
 
 ## 4. Publishing status — read this before clicking anything
 
@@ -36,8 +52,9 @@ written, that means the calendar integration would already be dead by demo day -
 `invalid_grant`, and no code bug to explain it.
 
 In **In production** with an app that hasn't gone through Google's verification review
-(this app only requests `calendar.events`, a narrow, non-sensitive scope, so verification
-isn't worth pursuing for this scope), refresh tokens persist normally - the only visible
+(this app's only scope requiring review is `calendar.events`, narrow and non-sensitive
+enough that verification isn't worth pursuing - `openid`/`email`, see §6, never require it),
+refresh tokens persist normally - the only visible
 cost is that every user sees Google's **"unverified app"** interstitial on first consent
 and has to click **"Advanced" → "Go to \<app name> (unsafe)"** to proceed. That's a one-time
 click per user, not a functional limitation. Accept it; publish to production.
@@ -56,16 +73,21 @@ click per user, not a functional limitation. Accept it; publish to production.
 
 ## 6. Scope
 
-The app requests exactly one scope, at runtime (`server/src/google/oauth.js`), nowhere
+The app requests three scopes, at runtime (`server/src/google/oauth.js`), nowhere
 configured in the Console:
 
 ```
-https://www.googleapis.com/auth/calendar.events
+https://www.googleapis.com/auth/calendar.events openid email
 ```
 
-Not the broader `calendar` or `calendar.readonly` scopes - `calendar.events` is the minimum
-that allows creating, updating, and deleting events, and nothing else (no access to the
-user's existing calendars, free/busy data, or calendar list).
+`calendar.events` is the one scope that touches calendar data - not the broader `calendar`
+or `calendar.readonly` scopes, since `calendar.events` is the minimum that allows creating,
+updating, and deleting events, and nothing else (no access to the user's existing calendars,
+free/busy data, or calendar list). `openid` and `email` add no calendar access at all; they
+are what makes Google return an `id_token` in the token exchange response, which is the only
+source for the connected address shown in the UI ("Connected as ..."). Both are Google's
+own non-sensitive scopes - unlike `calendar.events`, they never trigger a verification
+review, so adding them does not change anything else in this setup.
 
 ## 7. Where each value goes
 

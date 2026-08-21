@@ -17,7 +17,11 @@ import { unavailable } from '../lib/errors.js';
 import { encryptToken, decryptToken } from './crypto.js';
 
 const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
-const SCOPE = 'https://www.googleapis.com/auth/calendar.events';
+// `openid email` adds no calendar access - it's what makes Google return an
+// id_token at all, which is the only source for the connected address shown
+// in the UI ("Connected as ..."). Both are non-sensitive scopes (no Google
+// verification review needed), unlike calendar.events.
+const SCOPE = 'https://www.googleapis.com/auth/calendar.events openid email';
 
 function base64url(input) {
   return Buffer.from(input).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
