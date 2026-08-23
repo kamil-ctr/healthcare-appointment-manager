@@ -407,18 +407,3 @@ commit referenced:
   store (Postgres or Redis) if this ever ran on more than one.
 - Everything runs as one Render web service, so a crash restarts the whole API, not just one
   worker.
-
----
-
-## Where to look (grader's guide)
-
-| Evaluation focus | Files / docs |
-|---|---|
-| Slot conflicts / concurrency | `docs/schema.sql` (`unique_active_appointment`, `appointments_no_overlap`), `server/src/services/appointments.js`, `server/scripts/concurrency-check.js`, `docs/system-design.md` §1 |
-| Doctor-leave handling | `server/src/services/leave.js`, `docs/api.md` (`POST /api/admin/doctors/:id/leave`), `docs/system-design.md` §2 |
-| Notification reliability | `docs/schema.sql` (`outbox`, `reminders`), `server/src/jobs/outbox.js`, `docs/system-design.md` §4, `docs/api.md` (`POST /api/internal/jobs/tick`) |
-| LLM prompt quality and failure handling | `docs/llm-prompts.md` (full prompts, injection-guard test case, hallucination-gate test case), `server/src/llm/` |
-| Database schema | `docs/schema.sql` (idempotent, fully commented) |
-| API design | `docs/api.md` (every route, every error code) |
-| Email / calendar integration | `server/src/mail/`, `server/src/google/`, `docs/google-calendar-setup.md`, README "Database design" §3 |
-| Documentation | this file, `docs/system-design.md` (≤800 words), `docs/deployment.md` (real production account) |
