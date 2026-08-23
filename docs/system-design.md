@@ -18,7 +18,9 @@ read-then-write gap exists, so no lost update is possible regardless of request 
 process count.
 
 Verified with `server/scripts/concurrency-check.js`: 20 simultaneous holds on one slot →
-1 success, 19 conflicts, 1 row in the database.
+1 success, 19 conflicts, 1 row in the database. Reproducing the exact 19-conflict count needs a
+client that hasn't recently hit the rate-limited hold endpoint; the one-row guarantee itself is
+independent of and unaffected by the rate limiter.
 
 Because the index is *partial*, cancelled and expired appointments are excluded, so a released
 slot is immediately bookable again without any cleanup step.
@@ -37,9 +39,8 @@ near midnight for any non-zero UTC offset - for `Asia/Kolkata` (+5:30), an early
 appointment can carry a UTC date one day earlier than the doctor's wall-clock date. A raw
 UTC comparison would silently miss it.
 
-Notifications are `outbox` rows in that same transaction, not sent inline. A recorded leave
-never exists without its notification, and a failed email/Google call can't roll back or
-block the leave - retrying is the outbox worker's job, not this request's.
+Notifications are `outbox` rows in the same transaction, never sent inline - a failed
+email/Google call can't roll back or block the leave; retrying is the outbox worker's job.
 
 Deleting a leave record does not un-cancel its appointments: patients were already told
 their slot is gone, and reviving it would contradict a notification already sent.

@@ -93,6 +93,18 @@ export async function submitVisitNotes(appointmentId, doctorId, body) {
     const appt = rows[0];
     if (!appt) throw notFound('Appointment not found.');
     if (appt.doctorId !== doctorId) throw forbidden('This appointment does not belong to you.');
+
+    // Checked BEFORE the generic status check below: by the time notes
+    // already exist for an appointment, its status has already moved on to
+    // 'completed', not 'confirmed' - so the generic check would win every
+    // time and NOTES_EXIST would never actually fire for a genuine
+    // duplicate-submission attempt.
+    const existingNotes = await client.query(
+      `SELECT 1 FROM visit_notes WHERE appointment_id = $1`,
+      [appointmentId]
+    );
+    if (existingNotes.rows.length > 0) throw notesExist();
+
     if (appt.status !== 'confirmed') {
       throw conflict('Notes can only be submitted for a confirmed appointment.', { status: appt.status });
     }
@@ -107,6 +119,9 @@ export async function submitVisitNotes(appointmentId, doctorId, body) {
         [appointmentId, doctorId, clinicalNotes, diagnosis || null, followUpDate]
       );
     } catch (err) {
+      // Backstop for the race where two concurrent submits both pass the
+      // SELECT above before either INSERT commits - the unique constraint
+      // on visit_notes.appointment_id is the actual source of truth.
       if (err.code === '23505') throw notesExist();
       throw err;
     }

@@ -44,8 +44,10 @@ the service was created with). Following this doc's own same-region guidance abo
 project was provisioned in **Oregon** to match - not Singapore, which would add a trans-Pacific
 round trip (150-250ms+ per query) to every database call the API makes, on top of whatever
 latency the client already has to Render. `GET /api/health/db` reports round-trip latency
-directly; on this deployment it reads consistently 2-4ms, which is only possible because both
-services are in the same region and the same cloud provider's network.
+directly; on a warm instance it reads consistently 2-3ms (re-measured: four consecutive warm
+requests at 2.0-2.5ms, following one cold-start request that also paid the connection-pool's
+first round trip), which is only possible because both services are in the same region and the
+same cloud provider's network.
 
 **Neon gives you two connection strings - use the right one for the right job.**
 
@@ -156,11 +158,11 @@ happening on this deployment yet, and what that means for cold-start numbers in 
 
 | Setting | Value on this deployment |
 |---|---|
-| Root directory | `web` - **was empty/unset** until this session (see Troubleshooting); required once Git is connected, since the repo is a monorepo with no build target at its root |
+| Root directory | `web` - required since Git integration is connected and the repo is a monorepo with no build target at its root (see Troubleshooting for why an unset value only worked under the earlier CLI-only deploy) |
 | Build command | `npm run build` |
 | Output directory | `dist` |
 | Framework preset | Vite |
-| Git integration | **Connected this session** to `kamil-ctr/healthcare-appointment-manager` on `main`. Before that, this project had no Git connection at all - it was deployed once via `vercel --prod` run locally from inside `web/`, which uploads only the invoked directory and therefore never needed a Root Directory setting. That meant every code change had to be redeployed by hand; see Troubleshooting |
+| Git integration | Connected to `kamil-ctr/healthcare-appointment-manager` on `main` - every push to `main` triggers an automatic build and deploy. See Troubleshooting for the earlier CLI-only deploy method this replaced, and why it required every change to be redeployed by hand |
 
 **Environment variable:** `VITE_API_URL` = the Render URL, e.g.
 `https://healthcare-appointment-manager-5olh.onrender.com`.

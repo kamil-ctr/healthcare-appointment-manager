@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { asyncHandler } from '../lib/errors.js';
-import { required } from '../lib/validate.js';
+import { required, uuidParam } from '../lib/validate.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { rateLimit } from '../middleware/ratelimit.js';
 import {
@@ -26,6 +26,7 @@ import {
 export const appointmentsRouter = Router();
 
 appointmentsRouter.use(requireAuth);
+appointmentsRouter.param('id', uuidParam('id'));
 
 appointmentsRouter.post(
   '/hold',

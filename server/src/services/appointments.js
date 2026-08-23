@@ -191,10 +191,23 @@ export async function confirmAppointment(appointmentId, patientId) {
     const appt = rows[0];
     if (!appt) throw notFound('Appointment not found.');
     if (appt.patient_id !== patientId) throw forbidden('This appointment does not belong to you.');
+
+    // Checked BEFORE the generic not-confirmable case below: the periodic
+    // sweep flips a stale hold's status to 'expired' roughly once a minute,
+    // so by the time most users try to confirm a dead hold, status is
+    // already 'expired' rather than 'held' - if the generic check ran
+    // first, HOLD_EXPIRED (and the frontend's dedicated recovery flow it
+    // triggers) would almost never fire. Catching 'held' with a
+    // hold_expires_at already in the past covers the same cause when the
+    // sweep hasn't reached this row yet.
+    const isExpiredHold =
+      appt.status === 'expired' ||
+      (appt.status === 'held' && !(new Date(appt.hold_expires_at) > new Date()));
+    if (isExpiredHold) throw holdExpired();
+
     if (appt.status !== 'held') {
       throw conflict('Appointment is not in a confirmable state.', { status: appt.status });
     }
-    if (!(new Date(appt.hold_expires_at) > new Date())) throw holdExpired();
 
     // The summary itself is allowed to still be pending/failed - only the
     // symptom form is required. Booking can never depend on the model.
@@ -501,8 +514,12 @@ export async function listAppointments({ user, status, from, to }) {
     conditions.push(`a.starts_at >= $${params.length}`);
   }
   if (to) {
+    // `to` is a calendar date - inclusive of the whole day, so it must be
+    // compared against the START of the NEXT day, not midnight of `to`
+    // itself (an exclusive boundary that silently dropped every same-day
+    // match when from === to).
     params.push(to);
-    conditions.push(`a.starts_at <= $${params.length}`);
+    conditions.push(`a.starts_at < $${params.length}::date + interval '1 day'`);
   }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

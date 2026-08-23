@@ -7,13 +7,25 @@
  */
 import { one, query, withTransaction } from '../db/pool.js';
 import { badRequest, notFound, forbidden, conflict } from '../lib/errors.js';
+import { maxLength } from '../lib/validate.js';
 import { logEvent, actor } from './events.js';
+
+// Matches MAX_FIELD_CHARS in server/src/llm/prompts.js - that layer silently
+// truncates at this length before it ever reaches a prompt, which was
+// masking the fact that nothing rejected an oversized submission before
+// storage. Enforcing the same limit here makes the truncation redundant
+// rather than load-bearing.
+const MAX_SYMPTOM_FIELD_CHARS = 2000;
 
 export async function submitSymptomForm(appointmentId, patientId, body) {
   const symptoms = typeof body.symptoms === 'string' ? body.symptoms.trim() : '';
   if (!symptoms) {
     throw badRequest('symptoms is required.', { fields: ['symptoms'] });
   }
+  maxLength(symptoms, MAX_SYMPTOM_FIELD_CHARS, 'symptoms');
+  maxLength(body.existingConditions, MAX_SYMPTOM_FIELD_CHARS, 'existingConditions');
+  maxLength(body.currentMedications, MAX_SYMPTOM_FIELD_CHARS, 'currentMedications');
+  maxLength(body.allergies, MAX_SYMPTOM_FIELD_CHARS, 'allergies');
 
   let severity = null;
   if (body.severity !== undefined && body.severity !== null && body.severity !== '') {

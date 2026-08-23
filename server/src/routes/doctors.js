@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { asyncHandler, notFound } from '../lib/errors.js';
 import { requireAuth } from '../middleware/auth.js';
+import { uuidParam } from '../lib/validate.js';
 import { listDoctors, getDoctorDetail } from '../services/doctors.js';
 import { generateSlots } from '../services/slots.js';
 
@@ -11,6 +12,7 @@ function toISODate(date) {
 }
 
 doctorsRouter.use(requireAuth);
+doctorsRouter.param('id', uuidParam('id'));
 
 /** Active doctors only - a deactivated doctor never appears in patient-facing search. */
 doctorsRouter.get(

@@ -85,8 +85,8 @@ export async function generateSlots(doctorId, fromDate, toDate) {
      FROM computed
      LEFT JOIN appointments apt
        ON apt.doctor_id = $1
-      AND apt.starts_at = computed.starts_at
       AND apt.status IN ('held', 'confirmed')
+      AND tstzrange(apt.starts_at, apt.ends_at) && tstzrange(computed.starts_at, computed.ends_at)
      WHERE computed.starts_at >= now()
      ORDER BY computed.starts_at`,
     [doctorId, fromDate, toDate]

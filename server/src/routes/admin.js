@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { asyncHandler, badRequest, notFound } from '../lib/errors.js';
-import { required, isEmail, minLength, isDateString } from '../lib/validate.js';
+import { required, isEmail, minLength, isDateString, uuidParam } from '../lib/validate.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import {
   createDoctor,
@@ -16,6 +16,7 @@ import { listOutbox, retryOutboxRow } from '../services/notifications.js';
 export const adminRouter = Router();
 
 adminRouter.use(requireAuth, requireRole('admin'));
+adminRouter.param('id', uuidParam('id'));
 
 adminRouter.post(
   '/doctors',

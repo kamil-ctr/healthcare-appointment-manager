@@ -219,7 +219,9 @@ PASS - no double booking possible (both scenarios).
 ```
 
 (Output above is real, captured directly against a fresh clone and a fresh database — not a
-sample.)
+sample.) Reproducing the exact 19-conflict count needs a client that hasn't recently hit the
+rate-limited hold endpoint (`POST /api/appointments/hold` is itself rate-limited); the one-row,
+no-double-booking guarantee is independent of and unaffected by the rate limiter either way.
 
 ---
 
@@ -381,8 +383,12 @@ code or commit:
   in 24 hours of logs) — see `docs/deployment.md` §4.
 - **Warm response time** for `GET /api/doctors/:id/slots`: ~550ms average across 5 requests
   (385-660ms range) from an external client, real internet round-trip to Oregon included.
-- **Pre-visit LLM summary latency: 17 seconds** end to end, timestamped via the appointment's own
-  event log, not a stopwatch guess.
+- **Pre-visit LLM summary latency: near-instant to ~60 seconds** end to end, timestamped via the
+  appointment's own event log, not a stopwatch guess. The summary is never generated inline - it
+  waits for the next `JOB_INTERVAL_MS` tick (60,000ms), so the dominant factor is how soon after
+  submission the next tick lands, not the model call itself (~2s, per `docs/llm-prompts.md`).
+  Two real measured samples: 17s and 23.2s end to end - both correct, neither a constant, since
+  each depended on where in the 60-second cycle the submission happened to land.
 - **Email delivery is console-only in production** — no real SMTP credentials are set on Render,
   so every email (`.ics` attachment included) is fully rendered and logged but not delivered to
   an inbox. See `docs/deployment.md` Troubleshooting.
