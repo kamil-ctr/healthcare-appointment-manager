@@ -3,7 +3,7 @@
  * same tick as expire-holds/ai-summaries/reminders (see jobs/runner.js).
  * Handles both topics: 'email' via Nodemailer, 'calendar' via the Google
  * Calendar REST client (jobs/outbox.js is the only place Google is ever
- * called from - never a request path, per the day-7 non-negotiable).
+ * called from - never a request path).
  *
  * Two-phase claim, deliberately NOT the "hold the transaction open across
  * the external call" pattern used for ai_summaries - outbox has a
