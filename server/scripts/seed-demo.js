@@ -22,69 +22,193 @@
  * The pre-visit and post-visit LLM summaries are seeded as static, already
  * 'ready' content (not a live model call) - reproducible without network
  * access or an LLM_API_KEY, and instant to run in CI or against Neon.
+ *
+ * All seeded accounts share one domain (@clinicdemo.local) - a reserved,
+ * non-resolving TLD, so a misconfigured SMTP setup can never bounce real
+ * mail at a real registrant. Doctor/patient/admin passwords are
+ * deliberately distinct from each other (see ADMIN_PASSWORD/DOCTOR_PASSWORD/
+ * PATIENT_PASSWORD below) rather than one password shared by every role.
  */
 import { pool, one, closePool } from '../src/db/pool.js';
 import { hashPassword } from '../src/lib/password.js';
 import { PROMPT_VERSION, POST_VISIT_PROMPT_VERSION } from '../src/llm/prompts.js';
 import { logEvent, actor } from '../src/services/events.js';
 
-const DEMO_PASSWORD = 'DemoPass123!';
+const DEMO_DOMAIN = 'clinicdemo.local';
+const ADMIN_PASSWORD = 'ClinicOps#2026';
+const DOCTOR_PASSWORD = 'RoundsAt9!';
+const PATIENT_PASSWORD = 'WaitingRoom7';
 
+// weekday: 0 = Sunday .. 6 = Saturday (matches doctor_availability's convention).
 const DOCTORS = [
   {
-    email: 'dr.priya.sharma@demo.clinic.local',
-    fullName: 'Dr. Priya Sharma',
+    email: `iram.khan@${DEMO_DOMAIN}`,
+    fullName: 'Dr. Iram Khan',
     specialisation: 'General Medicine',
+    qualification: 'MBBS, MD - General Medicine',
+    bio: 'General physician focused on preventive care, diabetes, and hypertension management for adult patients.',
+    consultationFee: 650,
     slotMinutes: 20,
     timezone: 'Asia/Kolkata',
-    blockStart: '09:00',
-    blockEnd: '17:00', // 480 min / 20 = 24 slots/day
+    availability: [1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, start: '09:00', end: '14:00' })),
   },
   {
-    email: 'dr.arjun.mehta@demo.clinic.local',
-    fullName: 'Dr. Arjun Mehta',
+    email: `manas.awasthi@${DEMO_DOMAIN}`,
+    fullName: 'Dr. Manas Awasthi',
+    specialisation: 'General Medicine',
+    qualification: 'MBBS, MD - General Medicine',
+    bio: 'Runs an evening general medicine clinic for working professionals, with a special interest in lifestyle disease management.',
+    consultationFee: 720,
+    slotMinutes: 20,
+    timezone: 'Asia/Kolkata',
+    availability: [1, 2, 3, 4, 5].map((weekday) => ({ weekday, start: '16:00', end: '20:00' })),
+  },
+  {
+    email: `divyanshu.sharma@${DEMO_DOMAIN}`,
+    fullName: 'Dr. Divyanshu Sharma',
     specialisation: 'Cardiology',
+    qualification: 'MBBS, MD, DM - Cardiology',
+    bio: 'Interventional cardiologist with a decade of experience in coronary artery disease and hypertension management.',
+    consultationFee: 1350,
     slotMinutes: 30,
     timezone: 'Asia/Kolkata',
-    blockStart: '09:00',
-    blockEnd: '17:00', // 480 / 30 = 16
+    availability: [1, 2, 4, 5].map((weekday) => ({ weekday, start: '09:00', end: '13:00' })),
   },
   {
-    email: 'dr.fatima.khan@demo.clinic.local',
-    fullName: 'Dr. Fatima Khan',
+    email: `aerin.patel@${DEMO_DOMAIN}`,
+    fullName: 'Dr. Aerin Patel',
+    specialisation: 'Cardiology',
+    qualification: 'MBBS, MD, DM - Cardiology',
+    bio: 'Cardiologist specialising in preventive cardiology and post-cardiac-event rehabilitation.',
+    consultationFee: 1180,
+    slotMinutes: 30,
+    timezone: 'Asia/Kolkata',
+    availability: [2, 3, 4, 6].map((weekday) => ({ weekday, start: '11:00', end: '16:00' })),
+  },
+  {
+    email: `palak.khurana@${DEMO_DOMAIN}`,
+    fullName: 'Dr. Palak Khurana',
+    specialisation: 'Dermatology',
+    qualification: 'MBBS, MD - Dermatology, Venereology & Leprosy',
+    bio: 'Dermatologist treating acne, pigmentation, and hair loss, with a focus on cosmetic dermatology.',
+    consultationFee: 870,
+    slotMinutes: 20,
+    timezone: 'Asia/Kolkata',
+    availability: [1, 3, 5].map((weekday) => ({ weekday, start: '10:00', end: '14:00' })),
+    leaveNextWeek: true,
+  },
+  {
+    email: `sahil.sahani@${DEMO_DOMAIN}`,
+    fullName: 'Dr. Sahil Sahani',
+    specialisation: 'Dermatology',
+    qualification: 'MBBS, MD - Dermatology, Venereology & Leprosy',
+    bio: 'Evening and weekend dermatology clinic covering eczema, psoriasis, and skin infections.',
+    consultationFee: 820,
+    slotMinutes: 30,
+    timezone: 'Asia/Kolkata',
+    availability: [2, 4, 6].map((weekday) => ({ weekday, start: '15:00', end: '19:00' })),
+  },
+  {
+    email: `ayushi.sharma@${DEMO_DOMAIN}`,
+    fullName: 'Dr. Ayushi Sharma',
     specialisation: 'Pediatrics',
+    qualification: 'MBBS, MD - Pediatrics',
+    bio: 'Pediatrician focused on newborn care, vaccination schedules, and childhood nutrition.',
+    consultationFee: 750,
+    slotMinutes: 20,
+    timezone: 'Asia/Kolkata',
+    availability: [1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, start: '09:00', end: '12:00' })),
+  },
+  {
+    email: `ojas.patil@${DEMO_DOMAIN}`,
+    fullName: 'Dr. Ojas Patil',
+    specialisation: 'Pediatrics',
+    qualification: 'MBBS, MD - Pediatrics',
+    bio: 'Runs an after-school pediatric clinic for common childhood illnesses and growth monitoring.',
+    consultationFee: 680,
+    slotMinutes: 30,
+    timezone: 'Asia/Kolkata',
+    availability: [1, 2, 3, 4, 5].map((weekday) => ({ weekday, start: '16:00', end: '19:00' })),
+  },
+  {
+    email: `abhishek.yadav@${DEMO_DOMAIN}`,
+    fullName: 'Dr. Abhishek Yadav',
+    specialisation: 'Orthopedics',
+    qualification: 'MBBS, MS - Orthopedics',
+    bio: 'Orthopedic surgeon specialising in sports injuries and joint replacement, splits time between clinic and OT.',
+    consultationFee: 1050,
+    slotMinutes: 30,
+    timezone: 'Asia/Kolkata',
+    availability: [1, 3, 5].flatMap((weekday) => [
+      { weekday, start: '09:00', end: '13:00' },
+      { weekday, start: '17:00', end: '19:00' },
+    ]),
+  },
+  {
+    email: `kshitiz.joharwal@${DEMO_DOMAIN}`,
+    fullName: 'Dr. Kshitiz Joharwal',
+    specialisation: 'Orthopedics',
+    qualification: 'MBBS, MS - Orthopedics',
+    bio: 'Orthopedic consultant for spine and fracture care, sees patients for detailed follow-up consultations.',
+    consultationFee: 980,
     slotMinutes: 45,
     timezone: 'Asia/Kolkata',
-    blockStart: '09:00',
-    blockEnd: '16:30', // 450 / 45 = 10
+    availability: [2, 4, 6].map((weekday) => ({ weekday, start: '10:00', end: '14:30' })),
   },
   {
-    email: 'dr.rohan.verma@demo.clinic.local',
-    fullName: 'Dr. Rohan Verma',
-    specialisation: 'Dermatology',
+    email: `srajal.jain@${DEMO_DOMAIN}`,
+    fullName: 'Dr. Srajal Jain',
+    specialisation: 'Gynecology',
+    qualification: 'MBBS, MD, DGO - Obstetrics & Gynecology',
+    bio: 'Obstetrician-gynecologist providing antenatal care, family planning, and routine gynecological checkups.',
+    consultationFee: 1120,
     slotMinutes: 30,
     timezone: 'Asia/Kolkata',
-    blockStart: '10:00',
-    blockEnd: '18:00', // 480 / 30 = 16
-    leaveNextWeek: true,
+    availability: [1, 2, 3, 4, 5].map((weekday) => ({ weekday, start: '10:00', end: '13:00' })),
+  },
+  {
+    email: `tanay.singh@${DEMO_DOMAIN}`,
+    fullName: 'Dr. Tanay Singh',
+    specialisation: 'Gynecology',
+    qualification: 'MBBS, MD, DGO - Obstetrics & Gynecology',
+    bio: 'Gynecologist with a weekend clinic focused on PCOS management and adolescent gynecology.',
+    consultationFee: 890,
+    slotMinutes: 30,
+    timezone: 'Asia/Kolkata',
+    availability: [3, 5, 6].map((weekday) => ({ weekday, start: '14:00', end: '18:00' })),
+  },
+  {
+    email: `hammad.khan@${DEMO_DOMAIN}`,
+    fullName: 'Dr. Hammad Khan',
+    specialisation: 'Psychiatry',
+    qualification: 'MBBS, MD - Psychiatry',
+    bio: 'Psychiatrist specialising in anxiety, depression, and stress-related disorders, with longer sessions for thorough evaluation.',
+    consultationFee: 1450,
+    slotMinutes: 45,
+    timezone: 'Asia/Kolkata',
+    availability: [1, 2, 3, 4].map((weekday) => ({ weekday, start: '11:00', end: '15:30' })),
   },
 ];
 
 const PATIENTS = [
-  { email: 'patient.aisha@demo.local', fullName: 'Aisha Rahman' },
-  { email: 'patient.karan@demo.local', fullName: 'Karan Gupta' },
-  { email: 'patient.neha@demo.local', fullName: 'Neha Iyer' },
+  { email: `aisha.rahman@${DEMO_DOMAIN}`, fullName: 'Aisha Rahman' },
+  { email: `karan.gupta@${DEMO_DOMAIN}`, fullName: 'Karan Gupta' },
+  { email: `neha.iyer@${DEMO_DOMAIN}`, fullName: 'Neha Iyer' },
 ];
 
-const ADMIN_EMAIL = 'admin.demo@clinic.local';
+const ADMIN_EMAIL = `admin@${DEMO_DOMAIN}`;
 
-/** Next date (from today + startOffsetDays) that falls Mon-Fri. */
-function nextWeekday(startOffsetDays) {
+/** Next date (from today + startOffsetDays) whose weekday is in `weekdays`, walking forward day by day. */
+function nextAvailableWeekday(startOffsetDays, weekdays) {
   let d = new Date(Date.now() + startOffsetDays * 86400000);
-  while (d.getUTCDay() === 0 || d.getUTCDay() === 6) {
+  while (!weekdays.includes(d.getUTCDay())) {
     d = new Date(d.getTime() + 86400000);
   }
   return d;
+}
+
+function weekdaysOf(doctor) {
+  return [...new Set(doctor.availability.map((a) => a.weekday))];
 }
 
 /** Builds a UTC instant for `hhmm` local time in `timezone` on `dateAnchor`'s calendar date - computed in Postgres, not JS Date math, for correctness. */
@@ -142,10 +266,10 @@ async function main() {
   if (already) {
     const counts = await one(
       `SELECT
-         (SELECT count(*)::int FROM users WHERE role = 'doctor' AND email LIKE '%demo.clinic.local') AS doctors,
-         (SELECT count(*)::int FROM users WHERE role = 'patient' AND email LIKE '%demo.local') AS patients,
+         (SELECT count(*)::int FROM users WHERE role = 'doctor' AND email LIKE '%@${DEMO_DOMAIN}') AS doctors,
+         (SELECT count(*)::int FROM users WHERE role = 'patient' AND email LIKE '%@${DEMO_DOMAIN}') AS patients,
          (SELECT count(*)::int FROM appointments a JOIN doctors d ON d.user_id = a.doctor_id
-            JOIN users u ON u.id = d.user_id WHERE u.email LIKE '%demo.clinic.local') AS appointments`
+            JOIN users u ON u.id = d.user_id WHERE u.email LIKE '%@${DEMO_DOMAIN}') AS appointments`
     );
     console.log('[seed-demo] demo data already present - no-op.');
     console.log(
@@ -154,14 +278,16 @@ async function main() {
     return;
   }
 
-  const passwordHash = await hashPassword(DEMO_PASSWORD);
+  const adminPasswordHash = await hashPassword(ADMIN_PASSWORD);
+  const doctorPasswordHash = await hashPassword(DOCTOR_PASSWORD);
+  const patientPasswordHash = await hashPassword(PATIENT_PASSWORD);
 
   console.log('[seed-demo] creating admin...');
   const adminId = await withTx((c) =>
-    findOrCreateUser(c, { role: 'admin', email: ADMIN_EMAIL, fullName: 'Demo Admin', passwordHash })
+    findOrCreateUser(c, { role: 'admin', email: ADMIN_EMAIL, fullName: 'Demo Admin', passwordHash: adminPasswordHash })
   );
 
-  console.log('[seed-demo] creating 4 doctors with availability...');
+  console.log(`[seed-demo] creating ${DOCTORS.length} doctors with availability...`);
   const doctorIds = [];
   for (const doc of DOCTORS) {
     const userId = await withTx(async (c) => {
@@ -169,24 +295,24 @@ async function main() {
         role: 'doctor',
         email: doc.email,
         fullName: doc.fullName,
-        passwordHash,
+        passwordHash: doctorPasswordHash,
       });
       await c.query(
         `INSERT INTO doctors (user_id, specialisation, qualification, consultation_fee, slot_minutes, timezone, bio)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (user_id) DO NOTHING`,
-        [id, doc.specialisation, 'MBBS, MD', 500, doc.slotMinutes, doc.timezone, `${doc.fullName} - ${doc.specialisation}.`]
+        [id, doc.specialisation, doc.qualification, doc.consultationFee, doc.slotMinutes, doc.timezone, doc.bio]
       );
-      for (let weekday = 1; weekday <= 5; weekday += 1) {
+      for (const block of doc.availability) {
         await c.query(
           `INSERT INTO doctor_availability (doctor_id, weekday, start_time, end_time)
            VALUES ($1, $2, $3, $4)
            ON CONFLICT (doctor_id, weekday, start_time) DO NOTHING`,
-          [id, weekday, doc.blockStart, doc.blockEnd]
+          [id, block.weekday, block.start, block.end]
         );
       }
       if (doc.leaveNextWeek) {
-        const leaveDate = nextWeekday(7).toISOString().slice(0, 10);
+        const leaveDate = nextAvailableWeekday(7, weekdaysOf(doc)).toISOString().slice(0, 10);
         await c.query(
           `INSERT INTO doctor_leave (doctor_id, leave_date, reason, created_by)
            VALUES ($1, $2, 'Conference', $3)
@@ -200,21 +326,25 @@ async function main() {
     doctorIds.push({ ...doc, id: userId });
   }
 
-  console.log('[seed-demo] creating 3 patients...');
+  console.log(`[seed-demo] creating ${PATIENTS.length} patients...`);
   const patientIds = [];
   for (const p of PATIENTS) {
     const id = await withTx((c) =>
-      findOrCreateUser(c, { role: 'patient', email: p.email, fullName: p.fullName, passwordHash })
+      findOrCreateUser(c, { role: 'patient', email: p.email, fullName: p.fullName, passwordHash: patientPasswordHash })
     );
     patientIds.push({ ...p, id });
   }
 
-  const [drGeneral, drCardio, drPeds, drDerm] = doctorIds;
+  const byName = (name) => doctorIds.find((d) => d.fullName === name);
+  const drGeneral = byName('Dr. Iram Khan');
+  const drCardio = byName('Dr. Divyanshu Sharma');
+  const drPeds = byName('Dr. Ayushi Sharma');
+  const drDerm = byName('Dr. Palak Khurana');
   const [pAisha, pKaran, pNeha] = patientIds;
 
   console.log('[seed-demo] seeding appointment #1: confirmed upcoming, symptom form + READY pre-visit summary...');
   await withTx(async (c) => {
-    const day = nextWeekday(1);
+    const day = nextAvailableWeekday(1, weekdaysOf(drGeneral));
     const startsAt = await localInstant(day, '10:00', drGeneral.timezone);
     const endsAt = await localInstant(day, addMinutes('10:00', drGeneral.slotMinutes), drGeneral.timezone);
     const { rows } = await c.query(
@@ -261,7 +391,7 @@ async function main() {
 
   console.log('[seed-demo] seeding appointment #2: completed, notes + prescription + READY post-visit summary...');
   await withTx(async (c) => {
-    const day = nextWeekday(-3); // a past weekday
+    const day = nextAvailableWeekday(-3, weekdaysOf(drCardio)); // a past weekday
     const startsAt = await localInstant(day, '11:00', drCardio.timezone);
     const endsAt = await localInstant(day, addMinutes('11:00', drCardio.slotMinutes), drCardio.timezone);
     const { rows } = await c.query(
@@ -283,7 +413,7 @@ async function main() {
         drCardio.id,
         'Mild exertional chest tightness, ECG normal, likely musculoskeletal. Advised rest and follow-up if symptoms persist.',
         'Non-cardiac chest pain (musculoskeletal)',
-        nextWeekday(21).toISOString().slice(0, 10),
+        nextAvailableWeekday(21, [1, 2, 3, 4, 5]).toISOString().slice(0, 10),
       ]
     );
     const { rows: presRows } = await c.query(
@@ -318,7 +448,7 @@ async function main() {
 
   console.log('[seed-demo] seeding appointment #3: cancelled...');
   await withTx(async (c) => {
-    const day = nextWeekday(2);
+    const day = nextAvailableWeekday(2, weekdaysOf(drPeds));
     const startsAt = await localInstant(day, '11:15', drPeds.timezone);
     const endsAt = await localInstant(day, addMinutes('11:15', drPeds.slotMinutes), drPeds.timezone);
     const { rows } = await c.query(
@@ -333,9 +463,9 @@ async function main() {
 
   console.log('[seed-demo] seeding appointment #4: expired hold...');
   await withTx(async (c) => {
-    const day = nextWeekday(3);
-    const startsAt = await localInstant(day, '15:00', drDerm.timezone);
-    const endsAt = await localInstant(day, addMinutes('15:00', drDerm.slotMinutes), drDerm.timezone);
+    const day = nextAvailableWeekday(3, weekdaysOf(drDerm));
+    const startsAt = await localInstant(day, '13:00', drDerm.timezone);
+    const endsAt = await localInstant(day, addMinutes('13:00', drDerm.slotMinutes), drDerm.timezone);
     const { rows } = await c.query(
       `INSERT INTO appointments (doctor_id, patient_id, starts_at, ends_at, status, hold_expires_at)
        VALUES ($1, $2, $3, $4, 'expired', now() - interval '1 day')
@@ -346,12 +476,13 @@ async function main() {
     await logEvent(c, rows[0].id, 'expired', actor.system, 'seed-demo (never confirmed)');
   });
 
-  console.log('\n[seed-demo] done. Demo credentials (all roles share one password):');
-  console.log(`[seed-demo]   password: ${DEMO_PASSWORD}`);
-  console.log(`[seed-demo]   admin:    ${ADMIN_EMAIL}`);
+  console.log('\n[seed-demo] done. Demo credentials:');
+  console.log(`[seed-demo]   admin:    ${ADMIN_EMAIL}  /  ${ADMIN_PASSWORD}`);
+  console.log(`[seed-demo]   doctor password (shared across all doctor accounts): ${DOCTOR_PASSWORD}`);
   for (const d of DOCTORS) {
-    console.log(`[seed-demo]   doctor:   ${d.email}  (${d.specialisation}, ${d.slotMinutes}min slots)`);
+    console.log(`[seed-demo]   doctor:   ${d.email}  (${d.specialisation}, ₹${d.consultationFee}, ${d.slotMinutes}min slots)`);
   }
+  console.log(`[seed-demo]   patient password (shared across all patient accounts): ${PATIENT_PASSWORD}`);
   for (const p of PATIENTS) console.log(`[seed-demo]   patient:  ${p.email}`);
   console.log("[seed-demo] No outbox rows were enqueued for any seeded row - see this script's header comment for why.");
 }

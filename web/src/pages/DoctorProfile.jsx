@@ -41,7 +41,7 @@ export default function DoctorProfile() {
           <h1 className="text-2xl">{doctor.fullName}</h1>
           <p className="text-ink/60">{doctor.specialisation}</p>
           {doctor.qualification && <p className="text-sm text-ink/50">{doctor.qualification}</p>}
-          <p className="mt-2 font-data text-sm">${doctor.consultationFee} consultation</p>
+          <p className="mt-2 font-data text-sm">₹{Math.round(Number(doctor.consultationFee))} consultation</p>
         </div>
       </div>
 

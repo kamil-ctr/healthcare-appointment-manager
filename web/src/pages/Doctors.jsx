@@ -97,7 +97,7 @@ export default function Doctors() {
               <div>
                 <p className="font-medium">{d.fullName}</p>
                 <p className="text-sm text-ink/60">{d.specialisation}</p>
-                <p className="font-data text-xs text-ink/50">${d.consultationFee}</p>
+                <p className="font-data text-xs text-ink/50">₹{Math.round(Number(d.consultationFee))}</p>
               </div>
             </Link>
           ))}

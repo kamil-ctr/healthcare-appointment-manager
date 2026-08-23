@@ -18,16 +18,35 @@ real settings used, and every issue hit getting there: [`docs/deployment.md`](do
 
 ![Patient home — find a doctor](https://raw.githubusercontent.com/kamil-ctr/healthcare-appointment-manager/main/docs/screenshots/home-doctor-search.png)
 
-**Demo credentials** (seeded by `server/scripts/seed-demo.js`, all roles share one password):
+**Demo credentials** (seeded by `server/scripts/seed-demo.js`; every seeded account lives on
+one reserved, non-resolving domain, `@clinicdemo.local`, so a misconfigured SMTP setup can never
+bounce mail at a real registrant. Each role has its own password - the three below, not one
+password shared by everyone):
 
 | Role | Email | Password |
 |---|---|---|
-| Admin | `admin.demo@clinic.local` | `DemoPass123!` |
-| Doctor | `dr.priya.sharma@demo.clinic.local` (General Medicine, 20-min slots) | `DemoPass123!` |
-| Doctor | `dr.arjun.mehta@demo.clinic.local` (Cardiology, 30-min slots) | `DemoPass123!` |
-| Doctor | `dr.fatima.khan@demo.clinic.local` (Pediatrics, 45-min slots) | `DemoPass123!` |
-| Doctor | `dr.rohan.verma@demo.clinic.local` (Dermatology, 30-min slots, has a leave day) | `DemoPass123!` |
-| Patient | `patient.aisha@demo.local` / `patient.karan@demo.local` / `patient.neha@demo.local` | `DemoPass123!` |
+| Admin | `admin@clinicdemo.local` | `ClinicOps#2026` |
+| Doctor (any of the 13 below) | `firstname.lastname@clinicdemo.local` | `RoundsAt9!` |
+| Patient | `aisha.rahman@clinicdemo.local` / `karan.gupta@clinicdemo.local` / `neha.iyer@clinicdemo.local` | `WaitingRoom7` |
+
+**Doctor roster** (13 doctors across 7 specialisations, each with its own fee, slot length, and
+weekly schedule - not copy-pasted):
+
+| Doctor | Specialisation | Fee | Slot | Notes |
+|---|---|---|---|---|
+| Dr. Iram Khan | General Medicine | ₹650 | 20 min | Mon-Sat mornings |
+| Dr. Manas Awasthi | General Medicine | ₹720 | 20 min | Evening clinic, Mon-Fri |
+| Dr. Divyanshu Sharma | Cardiology | ₹1350 | 30 min | Mon, Tue, Thu, Fri |
+| Dr. Aerin Patel | Cardiology | ₹1180 | 30 min | Tue, Wed, Thu, Sat |
+| Dr. Palak Khurana | Dermatology | ₹870 | 20 min | Mon, Wed, Fri - has a leave day |
+| Dr. Sahil Sahani | Dermatology | ₹820 | 30 min | Evening/weekend: Tue, Thu, Sat |
+| Dr. Ayushi Sharma | Pediatrics | ₹750 | 20 min | Mon-Sat mornings |
+| Dr. Ojas Patil | Pediatrics | ₹680 | 30 min | After-school clinic, Mon-Fri |
+| Dr. Abhishek Yadav | Orthopedics | ₹1050 | 30 min | Split shift (clinic/OT), Mon, Wed, Fri |
+| Dr. Kshitiz Joharwal | Orthopedics | ₹980 | 45 min | Tue, Thu, Sat |
+| Dr. Srajal Jain | Gynecology | ₹1120 | 30 min | Mon-Fri |
+| Dr. Tanay Singh | Gynecology | ₹890 | 30 min | Weekend clinic: Wed, Fri, Sat |
+| Dr. Hammad Khan | Psychiatry | ₹1450 | 45 min | Mon-Thu, longer sessions |
 
 ---
 
@@ -208,8 +227,9 @@ cd server && ALLOW_DEMO_SEED=true node scripts/seed-demo.js
 ```
 
 Refuses to run without `ALLOW_DEMO_SEED=true`. Idempotent — a second run reports existing counts
-instead of duplicating. Creates 1 admin, 4 doctors (20/30/45-min slots, one with a leave day), 3
-patients, and 4 appointments spanning every state: confirmed upcoming with a ready pre-visit
+instead of duplicating. Creates 1 admin, 13 doctors across 7 specialisations (20/30/45-min
+slots, varied fees and weekly schedules, one with a leave day), 3 patients, and 4 appointments
+spanning every state: confirmed upcoming with a ready pre-visit
 summary, completed with notes/prescription/ready post-visit summary, cancelled, and an expired
 hold. No `outbox` rows are enqueued for seeded data and the two seeded AI summaries are static —
 clicking around the demo account never triggers a wave of real emails or LLM calls. Rationale in

@@ -191,7 +191,7 @@ function CreateDoctorForm({ onCancel, onCreated }) {
           <input value={form.qualification} onChange={set('qualification')} className={input} />
         </label>
         <label className={label}>
-          Consultation fee
+          Consultation fee (₹)
           <input
             type="number"
             min="0"
