@@ -296,6 +296,7 @@ async function processCalendarOne(id) {
           await upsertCalendarEventRow(client, row.appointmentId, row.userId, googleEventId, calendarId);
         }
         await client.query(`UPDATE outbox SET status = 'sent', sent_at = now() WHERE id = $1`, [id]);
+        await logEvent(client, row.appointmentId, 'calendar_event_updated', actor.system, row.userId === row.patientId ? 'patient' : 'doctor');
       });
       return 'sent';
     }

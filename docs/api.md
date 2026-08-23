@@ -451,8 +451,8 @@ The appointment's own patient or doctor, or an admin - same access rule as
 Response `200`: `{ "events": [ { "event", "actor", "detail", "createdAt" } ] }`, oldest first.
 `event` is one of `held`, `symptoms_submitted`, `confirmed`, `cancelled_by_patient`,
 `cancelled_by_doctor`, `cancelled_by_leave`, `expired`, `rescheduled`, `summary_ready`,
-`summary_failed`, `email_sent`, `calendar_event_created`, `calendar_event_deleted`,
-`notes_submitted`, `notes_amended`, `completed`, `post_visit_summary_ready`,
+`summary_failed`, `email_sent`, `calendar_event_created`, `calendar_event_updated`,
+`calendar_event_deleted`, `notes_submitted`, `notes_amended`, `completed`, `post_visit_summary_ready`,
 `post_visit_summary_failed`, `medication_reminders_scheduled`,
 `medication_reminders_cancelled`. `actor` is `"patient:<id>"` / `"doctor:<id>"` /
 `"admin:<id>"` / `"system"`. Every row is written in the same transaction as the change it
