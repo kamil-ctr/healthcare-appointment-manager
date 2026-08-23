@@ -6,32 +6,42 @@ import Skeleton from './Skeleton.jsx';
 function SymptomFormReadout({ form }) {
   if (!form) return null;
   return (
-    <dl className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+    <div className="mt-3 flex flex-col gap-4 text-sm">
       <div>
-        <dt className="text-xs uppercase tracking-wide text-ink/50">Symptoms</dt>
-        <dd>{form.symptoms}</dd>
+        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-ink/40">Current symptoms</p>
+        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-ink/50">What the patient reported</dt>
+            <dd>{form.symptoms}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-ink/50">Duration</dt>
+            <dd>{form.duration || 'Not specified'}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-ink/50">Severity</dt>
+            <dd className="font-data">{form.severity != null ? `${form.severity}/10` : 'Not specified'}</dd>
+          </div>
+        </dl>
       </div>
-      <div>
-        <dt className="text-xs uppercase tracking-wide text-ink/50">Duration</dt>
-        <dd>{form.duration || 'Not specified'}</dd>
+      <div className="border-t border-ink/12 pt-4">
+        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-ink/40">Background health information</p>
+        <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-ink/50">Ongoing health conditions</dt>
+            <dd>{form.existingConditions || 'None reported'}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-ink/50">Current medications</dt>
+            <dd>{form.currentMedications || 'None reported'}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase tracking-wide text-ink/50">Allergies</dt>
+            <dd>{form.allergies || 'None reported'}</dd>
+          </div>
+        </dl>
       </div>
-      <div>
-        <dt className="text-xs uppercase tracking-wide text-ink/50">Severity</dt>
-        <dd className="font-data">{form.severity != null ? `${form.severity}/10` : 'Not specified'}</dd>
-      </div>
-      <div>
-        <dt className="text-xs uppercase tracking-wide text-ink/50">Existing conditions</dt>
-        <dd>{form.existingConditions || 'None reported'}</dd>
-      </div>
-      <div>
-        <dt className="text-xs uppercase tracking-wide text-ink/50">Current medications</dt>
-        <dd>{form.currentMedications || 'None reported'}</dd>
-      </div>
-      <div>
-        <dt className="text-xs uppercase tracking-wide text-ink/50">Allergies</dt>
-        <dd>{form.allergies || 'None reported'}</dd>
-      </div>
-    </dl>
+    </div>
   );
 }
 
@@ -95,6 +105,33 @@ export default function PreVisitSummaryCard({ appointmentId, canRetry }) {
           <span className="font-medium">Chief complaint: </span>
           {data.content.chiefComplaint}
         </p>
+        {data.content.symptomTimeline && (
+          <p className="mt-2 text-sm">
+            <span className="font-medium">Timeline: </span>
+            {data.content.symptomTimeline}
+          </p>
+        )}
+        {data.content.relevantHistory && (
+          <div className="mt-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-ink/50">Relevant history</p>
+            <p className="mt-1 text-sm">{data.content.relevantHistory}</p>
+          </div>
+        )}
+        {data.content.possibleConcernAreas && data.content.possibleConcernAreas.length > 0 && (
+          <div className="mt-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-ink/50">Possible concern areas</p>
+            <ul className="mt-1 flex flex-wrap gap-1.5">
+              {data.content.possibleConcernAreas.map((area, i) => (
+                <li
+                  key={i}
+                  className="rounded-[var(--radius-pill)] border border-ink/12 px-2 py-0.5 text-xs text-ink/70"
+                >
+                  {area}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <div className="mt-3">
           <p className="text-xs font-medium uppercase tracking-wide text-ink/50">Suggested questions</p>
           <ul className="mt-1 list-disc pl-5 text-sm">
@@ -103,7 +140,7 @@ export default function PreVisitSummaryCard({ appointmentId, canRetry }) {
             ))}
           </ul>
         </div>
-        <p className="mt-4 text-xs text-ink/50">
+        <p className="mt-4 rounded-[var(--radius-card)] border border-signal/30 bg-signal/10 px-3 py-2 text-xs font-medium text-signal">
           AI-generated triage support to help prepare for this visit - not a diagnosis.
         </p>
       </div>

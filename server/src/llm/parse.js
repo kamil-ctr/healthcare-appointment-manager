@@ -20,7 +20,72 @@ function stripCodeFences(text) {
   return match ? match[1].trim() : trimmed;
 }
 
-export function parseSummaryText(text) {
+// --- Information-loss gate: catches the model paraphrasing away the
+// patient's own specifics (a duration, a severity number, a named
+// symptom) even though the text passed schema validation cleanly. Only
+// fires when the patient's own input actually contained something
+// concrete to preserve - a genuinely vague complaint can't be faulted for
+// producing a vague summary. See docs/llm-prompts.md for the rationale.
+const GENERIC_MIN_LENGTH = 50;
+const STOPWORDS = new Set([
+  'the', 'and', 'with', 'from', 'this', 'that', 'have', 'has', 'been', 'were', 'was', 'for',
+  'are', 'not', 'none', 'also', 'than', 'then', 'into', 'onto', 'over', 'under', 'about',
+  'their', 'they', 'patient', 'reports', 'reported', 'presents', 'presenting',
+]);
+
+function extractConcreteWords(text) {
+  return new Set(
+    String(text ?? '')
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((w) => w.length >= 4 && !STOPWORDS.has(w))
+  );
+}
+
+function hasDigit(text) {
+  return /\d/.test(String(text ?? ''));
+}
+
+function buildSourceText(symptomForm) {
+  if (!symptomForm) return '';
+  const severity = symptomForm.severity != null ? String(symptomForm.severity) : '';
+  return [symptomForm.symptoms, symptomForm.duration, severity].filter(Boolean).join(' ');
+}
+
+function isSuspiciouslyGeneric(value, sourceText) {
+  const sourceWords = extractConcreteWords(sourceText);
+  const sourceHasDigit = hasDigit(sourceText);
+  if (!sourceHasDigit && sourceWords.size === 0) return false; // nothing concrete in the source to lose
+
+  const trimmed = String(value ?? '').trim();
+  if (trimmed.length >= GENERIC_MIN_LENGTH) return false;
+  if (hasDigit(trimmed)) return false;
+  for (const w of extractConcreteWords(trimmed)) {
+    if (sourceWords.has(w)) return false;
+  }
+  return true;
+}
+
+// --- Diagnosis guard: possibleConcernAreas must name general clinical
+// attention categories ("musculoskeletal", "possible infection"), never a
+// specific disease. This is a short, representative denylist, not an
+// exhaustive medical taxonomy - it exists to catch the model naming an
+// actual condition outright, not to be a clinical classifier.
+const CONCERN_DENYLIST = [
+  'appendicitis', 'pneumonia', 'bronchitis', 'asthma', 'copd', 'tuberculosis', 'covid',
+  'influenza', 'diabetes', 'hypertension', 'stroke', 'heart attack', 'myocardial infarction',
+  'migraine', 'epilepsy', 'meningitis', 'sepsis', 'cancer', 'tumor', 'tumour', 'fracture',
+  'arthritis', 'osteoarthritis', 'gastritis', 'ulcer', 'hepatitis', 'kidney stone',
+  'gallstone', 'urinary tract infection', 'pregnancy', 'depression', 'anxiety disorder',
+  'hiv', 'aids',
+];
+
+function matchesDenylistedCondition(text) {
+  const lower = String(text ?? '').toLowerCase();
+  return CONCERN_DENYLIST.find((name) => lower.includes(name));
+}
+
+export function parseSummaryText(text, symptomForm) {
   const stripped = stripCodeFences(String(text ?? ''));
 
   let json;
@@ -39,6 +104,28 @@ export function parseSummaryText(text) {
   if (typeof json.chiefComplaint !== 'string' || json.chiefComplaint.trim() === '') {
     throw new SummaryValidationError('chiefComplaint must be a non-empty string.');
   }
+  if (typeof json.symptomTimeline !== 'string' || json.symptomTimeline.trim() === '') {
+    throw new SummaryValidationError('symptomTimeline must be a non-empty string.');
+  }
+  if (typeof json.relevantHistory !== 'string' || json.relevantHistory.trim() === '') {
+    throw new SummaryValidationError(
+      'relevantHistory must be a non-empty string - state explicitly that nothing is relevant if that is the case.'
+    );
+  }
+  if (
+    !Array.isArray(json.possibleConcernAreas) ||
+    json.possibleConcernAreas.length < 2 ||
+    json.possibleConcernAreas.length > 4 ||
+    json.possibleConcernAreas.some((a) => typeof a !== 'string' || a.trim() === '')
+  ) {
+    throw new SummaryValidationError('possibleConcernAreas must be an array of 2 to 4 non-empty strings.');
+  }
+  const denylisted = json.possibleConcernAreas.map(matchesDenylistedCondition).find(Boolean);
+  if (denylisted) {
+    throw new SummaryValidationError(
+      `possibleConcernAreas must name general clinical attention categories, not a specific diagnosis - "${denylisted}" is a named condition. Use categories like "musculoskeletal" or "possible infection" instead.`
+    );
+  }
   if (
     !Array.isArray(json.suggestedQuestions) ||
     json.suggestedQuestions.length !== 3 ||
@@ -47,9 +134,24 @@ export function parseSummaryText(text) {
     throw new SummaryValidationError('suggestedQuestions must be an array of exactly 3 non-empty strings.');
   }
 
+  const sourceText = buildSourceText(symptomForm);
+  if (isSuspiciouslyGeneric(json.chiefComplaint, sourceText)) {
+    throw new SummaryValidationError(
+      "chiefComplaint is too generic - it dropped the patient's own specifics. Reflect at least one concrete detail from their words (a duration, a number, or a named symptom), not a vague paraphrase."
+    );
+  }
+  if (isSuspiciouslyGeneric(json.symptomTimeline, sourceText)) {
+    throw new SummaryValidationError(
+      "symptomTimeline is too generic - it dropped the patient's own specifics. Reflect at least one concrete detail from their words (a duration, a number, or a named symptom), not a vague paraphrase."
+    );
+  }
+
   return {
     urgency: json.urgency,
     chiefComplaint: json.chiefComplaint.trim().slice(0, 120),
+    symptomTimeline: json.symptomTimeline.trim(),
+    relevantHistory: json.relevantHistory.trim(),
+    possibleConcernAreas: json.possibleConcernAreas.map((a) => a.trim()),
     suggestedQuestions: json.suggestedQuestions.map((q) => q.trim()),
   };
 }

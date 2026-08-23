@@ -17,9 +17,11 @@ export default function Nav() {
           Clinic
         </Link>
         <div className="flex items-center gap-5 text-sm">
-          <Link to="/doctors" className="text-ink hover:text-signal">
-            Find a doctor
-          </Link>
+          {auth?.user.role !== 'doctor' && (
+            <Link to="/doctors" className="text-ink hover:text-signal">
+              Find a doctor
+            </Link>
+          )}
           {auth?.user.role === 'patient' && (
             <Link to="/appointments" className="text-ink hover:text-signal">
               My appointments

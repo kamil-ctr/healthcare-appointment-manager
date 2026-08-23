@@ -239,6 +239,9 @@ async function main() {
     const content = {
       urgency: 'Medium',
       chiefComplaint: 'Headache and low-grade fever for 2 days, worsening in the evenings',
+      symptomTimeline: 'Headache and low-grade fever, 5/10 severity, present 2 days, worse in the evenings',
+      relevantHistory: 'No relevant history reported - no existing conditions, medications, or allergies.',
+      possibleConcernAreas: ['possible infection', 'neurological'],
       suggestedQuestions: [
         'Is the fever accompanied by neck stiffness or light sensitivity?',
         'Any recent travel, sick contacts, or missed vaccinations?',

@@ -85,16 +85,20 @@ export default function Home() {
   const { auth, call } = useAuth();
   const [doctors, setDoctors] = useState(null);
   const hero = HERO_COPY[auth?.user.role] || HERO_COPY.default;
+  // The doctor browsing/booking sections below are a patient-only flow -
+  // a doctor account has no use for searching for another doctor to book
+  // with, and the hero CTA above already sends them to their own queue.
+  const showDoctorBrowsing = auth?.user.role !== 'doctor';
 
   useEffect(() => {
-    if (!auth) {
+    if (!auth || !showDoctorBrowsing) {
       setDoctors(null);
       return;
     }
     call('/doctors')
       .then((d) => setDoctors(d.doctors.slice(0, 8)))
       .catch(() => setDoctors([]));
-  }, [auth, call]);
+  }, [auth, call, showDoctorBrowsing]);
 
   return (
     <main>
@@ -112,58 +116,62 @@ export default function Home() {
         <HeroSlotDemo />
       </section>
 
-      <section className="border-y border-ink/12 bg-panel py-10">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <h2 className="mb-4 text-lg">Browse by speciality</h2>
-          <div className="flex gap-3 overflow-x-auto pb-2">
-            {SPECIALITIES.map((s) => (
-              <Link
-                key={s}
-                to={`/doctors?specialisation=${encodeURIComponent(s)}`}
-                className="shrink-0 rounded-[var(--radius-pill)] border border-ink/12 px-4 py-2 text-sm transition-colors hover:border-signal hover:text-signal"
-              >
-                {s}
-              </Link>
-            ))}
+      {showDoctorBrowsing && (
+        <section className="border-y border-ink/12 bg-panel py-10">
+          <div className="mx-auto max-w-6xl px-4 sm:px-6">
+            <h2 className="mb-4 text-lg">Browse by speciality</h2>
+            <div className="flex gap-3 overflow-x-auto pb-2">
+              {SPECIALITIES.map((s) => (
+                <Link
+                  key={s}
+                  to={`/doctors?specialisation=${encodeURIComponent(s)}`}
+                  className="shrink-0 rounded-[var(--radius-pill)] border border-ink/12 px-4 py-2 text-sm transition-colors hover:border-signal hover:text-signal"
+                >
+                  {s}
+                </Link>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
-      <section className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
-        <h2 className="mb-4 text-lg">Available doctors</h2>
-        {!auth && (
-          <p className="text-sm text-ink/60">
-            <Link to="/login" className="text-signal underline">
-              Sign in
-            </Link>{' '}
-            to browse available doctors.
-          </p>
-        )}
-        {auth && doctors === null && (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-            <Skeleton variant="card" />
-            <Skeleton variant="card" />
-            <Skeleton variant="card" />
-            <Skeleton variant="card" />
-          </div>
-        )}
-        {auth && doctors?.length === 0 && <p className="text-sm text-ink/60">No doctors listed yet.</p>}
-        {auth && doctors && doctors.length > 0 && (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-            {doctors.map((d) => (
-              <Link
-                key={d.id}
-                to={`/doctors/${d.id}`}
-                className="flex flex-col items-center gap-2 rounded-[var(--radius-card)] border border-ink/12 bg-panel p-4 text-center transition-colors hover:border-signal"
-              >
-                <Avatar name={d.fullName} />
-                <span className="text-sm font-medium">{d.fullName}</span>
-                <span className="text-xs text-ink/60">{d.specialisation}</span>
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
+      {showDoctorBrowsing && (
+        <section className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
+          <h2 className="mb-4 text-lg">Available doctors</h2>
+          {!auth && (
+            <p className="text-sm text-ink/60">
+              <Link to="/login" className="text-signal underline">
+                Sign in
+              </Link>{' '}
+              to browse available doctors.
+            </p>
+          )}
+          {auth && doctors === null && (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+              <Skeleton variant="card" />
+              <Skeleton variant="card" />
+              <Skeleton variant="card" />
+              <Skeleton variant="card" />
+            </div>
+          )}
+          {auth && doctors?.length === 0 && <p className="text-sm text-ink/60">No doctors listed yet.</p>}
+          {auth && doctors && doctors.length > 0 && (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+              {doctors.map((d) => (
+                <Link
+                  key={d.id}
+                  to={`/doctors/${d.id}`}
+                  className="flex flex-col items-center gap-2 rounded-[var(--radius-card)] border border-ink/12 bg-panel p-4 text-center transition-colors hover:border-signal"
+                >
+                  <Avatar name={d.fullName} />
+                  <span className="text-sm font-medium">{d.fullName}</span>
+                  <span className="text-xs text-ink/60">{d.specialisation}</span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
     </main>
   );
 }
