@@ -4,7 +4,7 @@
 
 ## 1. Double-booking prevention
 
-Slot uniqueness is a database invariant, not application logic:
+Slot uniqueness is enforced by the database, not by application code:
 
 ```sql
 CREATE UNIQUE INDEX unique_active_appointment
@@ -12,81 +12,74 @@ CREATE UNIQUE INDEX unique_active_appointment
   WHERE status IN ('held', 'confirmed');
 ```
 
-Booking is a single `INSERT` inside a transaction. Under concurrent load exactly one insert
-commits; the others raise SQLSTATE `23505`, which the API translates into `409 CONFLICT`. No
-read-then-write gap exists, so no lost update is possible regardless of request interleaving or
-process count.
+Booking is one `INSERT` inside a transaction. Under concurrent load, exactly one insert succeeds
+and the rest raise SQLSTATE `23505`, mapped to `409 CONFLICT`. There's no gap between reading and
+writing, so no request can silently overwrite another.
 
-Verified with `server/scripts/concurrency-check.js`: 20 simultaneous holds on one slot →
-1 success, 19 conflicts, 1 row in the database. Reproducing the exact 19-conflict count needs a
-client that hasn't recently hit the rate-limited hold endpoint; the one-row guarantee itself is
-independent of and unaffected by the rate limiter.
+Checked with `server/scripts/concurrency-check.js`: 20 requests fired at one slot at once produce
+1 success, 19 conflicts, 1 row in the database. Getting exactly 19 conflicts needs a client that
+hasn't recently hit the rate limit - the one-row guarantee itself doesn't depend on it.
 
-Because the index is *partial*, cancelled and expired appointments are excluded, so a released
-slot is immediately bookable again without any cleanup step.
+Because the index is partial, cancelled and expired appointments don't count toward it, so a
+released slot is bookable again right away, with no cleanup step.
 
 ## 2. Doctor leave conflict handling
 
-Marking a doctor unavailable for a date is one `withTransaction` call: insert
-`doctor_leave`, lock that date's held/confirmed appointments with `SELECT ... FOR UPDATE`,
-cancel them, and enqueue their notifications - all in one transaction. A duplicate leave
-date raises SQLSTATE `23505` before any appointment is touched: zero side effects, never a
-partial cascade.
+Marking a doctor unavailable for a date is one transaction: insert the `doctor_leave` row, lock
+that date's held/confirmed appointments with `SELECT ... FOR UPDATE`, cancel them, and queue
+their notifications. A duplicate leave date raises SQLSTATE `23505` before any appointment is
+touched, so there's never a half-finished cancellation.
 
-The date match is `(starts_at AT TIME ZONE doctors.timezone)::date = $date`, never a bare
-UTC comparison. A doctor's local calendar date and the UTC date of the same instant diverge
-near midnight for any non-zero UTC offset - for `Asia/Kolkata` (+5:30), an early-morning
-appointment can carry a UTC date one day earlier than the doctor's wall-clock date. A raw
-UTC comparison would silently miss it.
+The date match is `(starts_at AT TIME ZONE doctors.timezone)::date = $date`, never a plain UTC
+comparison. A doctor's local date and the UTC date of the same moment can differ near midnight -
+for `Asia/Kolkata` (+5:30), an early-morning appointment can carry a UTC date one day earlier
+than the doctor's own wall-clock date. A raw UTC comparison would silently get this wrong.
 
-Notifications are `outbox` rows in the same transaction, never sent inline - a failed
-email/Google call can't roll back or block the leave; retrying is the outbox worker's job.
+Notifications are `outbox` rows in that same transaction, never sent right away, so a failed
+email or Google call can't block the leave - retrying is the outbox worker's job.
 
-Deleting a leave record does not un-cancel its appointments: patients were already told
-their slot is gone, and reviving it would contradict a notification already sent.
-Re-booking, not un-cancelling, is the correct path back to a confirmed slot.
+Removing a leave record doesn't bring back the appointments it cancelled. Patients were already
+told their slot was gone, and quietly reviving it would contradict a message already sent.
+Booking a new slot, not un-cancelling the old one, is the right way back.
 
 ## 3. Slot hold mechanism
 
-Booking is two-phase - hold, then confirm - because a patient needs a window to fill in
-details (and a symptom form) before the slot is final. A single-phase
-insert-and-done would either lock the slot forever on an abandoned form or force a
-mid-flow re-check, reopening the exact race the unique index exists to close.
+Booking happens in two steps - hold, then confirm - because a patient needs time to fill in the
+symptom form before the slot is locked in. One step would either hold the slot forever if the
+form is never finished, or need a mid-flow check, reopening the race the unique index closes.
 
-`hold_expires_at` lives on the `appointments` row, not in memory or Redis - that row is
-already the source of truth for slot ownership, and an in-memory timer or Redis TTL would
-just be a second system that has to stay consistent with it for no real benefit.
+`hold_expires_at` lives on the `appointments` row itself, not in memory or Redis. That row is
+already the source of truth for who owns the slot, so a separate timer would just be another
+system that has to stay in sync with it for no real benefit.
 
-Because the index is partial, an expired or cancelled appointment simply stops matching
-its `WHERE` clause the instant its status changes - bookable again immediately, no cleanup.
+Because the index is partial, an expired or cancelled appointment stops matching its `WHERE`
+clause the moment its status changes - bookable again immediately, with nothing to clean up.
 
-The periodic sweep (`status='held' AND hold_expires_at < now()` -> `'expired'`) only runs
-once a tick, so a dead hold can look taken for up to a minute after it actually expired.
-`holdAppointment`/`rescheduleAppointment` also run an inline sweep first, scoped to just
-that one doctor, inside the same transaction as the new insert - a patient booking right
-after someone else's hold died is never blocked by a row the periodic sweep hasn't reached
-yet. The periodic sweep remains backstop hygiene for doctors nobody is actively booking
-against, running both on an in-process interval and behind `POST /api/internal/jobs/tick`,
-shared-secret guarded, so a free-tier host that sleeps idle instances can still be driven
-by an external cron pinger.
+A background sweep (`status='held' AND hold_expires_at < now()` → `'expired'`) runs once per
+tick, so a dead hold can still look taken for up to a minute. To close that gap, `holdAppointment`
+and `rescheduleAppointment` also run a quick sweep of their own first, scoped to just that one
+doctor, in the same transaction as the new booking - so booking right after someone else's hold
+died is never blocked by a row the periodic sweep hasn't reached yet. That sweep still matters as
+a backstop for doctors nobody is actively booking against. It runs on an interval in-process, and
+behind `POST /api/internal/jobs/tick` (secret-protected) so an external cron job can drive it too.
 
 ## 4. Notification failure handling
 
-The `outbox` row is written in the *same transaction* as the business change, so a confirmed
-booking can never exist without its pending notification, and a failing SMTP call can't roll it
-back - sending is fully decoupled from the request that caused it.
+The `outbox` row is written in the same transaction as the change that caused it, so a confirmed
+booking can never exist without its notification queued, and a failing SMTP call can't undo the
+booking. Sending is fully separate from the request that triggered it.
 
-The worker claims a batch with `FOR UPDATE SKIP LOCKED`, marks it `'processing'`, and commits -
-a short transaction, not one held open across the network call. `SKIP LOCKED` lets overlapping
-ticks claim disjoint rows with zero coordination; `locked_at` stops a second tick re-claiming a
-row an earlier one is still sending, since the row lock itself is gone once phase one commits.
-Only once `locked_at` exceeds ten minutes - a crashed worker - does the row become claimable
-again, through that same query, never a separate "unstick" step.
+The worker claims a batch with `FOR UPDATE SKIP LOCKED`, marks it `'processing'`, and commits - a
+short transaction, not one held open across a slow network call. `SKIP LOCKED` lets overlapping
+ticks claim different rows with no coordination. `locked_at` stops a second tick grabbing a row
+an earlier one is still working on, since the actual row lock is gone once that commits. Only
+once `locked_at` is older than ten minutes - meaning that worker likely crashed - is the row
+claimable again, through that same query.
 
-Backoff is exponential per attempt (~1m, 5m, 15m, 1h, 6h) with jitter, written into
-`next_retry_at` on every failure. At `attempts >= max_attempts` the row becomes `'failed'` - a
-dead letter an admin retries deliberately via `POST /api/admin/outbox/:id/retry`, not something
-the worker keeps hammering.
+Backoff grows with each attempt (roughly 1m, 5m, 15m, 1h, 6h, plus some jitter), written into
+`next_retry_at` after every failure. Once `attempts` reaches `max_attempts`, the row is marked
+`'failed'` - a dead letter an admin can retry on purpose via `POST /api/admin/outbox/:id/retry`,
+rather than something the worker keeps hammering on its own.
 
-`runJobs()` runs both on an interval and behind `POST /api/internal/jobs/tick` (shared-secret
-guarded), so a sleeping free-tier instance still delivers once cron wakes it.
+`runJobs()` runs on a timer and behind `POST /api/internal/jobs/tick`, so a sleeping free-tier
+instance still delivers its queued notifications once an external cron job wakes it up.
