@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom';
 import Nav from './components/Nav.jsx';
+import IdleTimeoutWarning from './components/IdleTimeoutWarning.jsx';
 import RequireAuth from './components/RequireAuth.jsx';
 import Home from './pages/Home.jsx';
 import Doctors from './pages/Doctors.jsx';
@@ -18,6 +19,7 @@ export default function App() {
   return (
     <>
       <Nav />
+      <IdleTimeoutWarning />
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />

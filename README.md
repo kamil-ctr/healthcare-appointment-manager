@@ -7,30 +7,32 @@ Patients book slots and submit symptoms in advance; an LLM produces a pre-visit 
 urgency level for the doctor and a patient-friendly summary after the visit. Both sides are kept
 informed through email and Google Calendar.
 
-## Live demo
+## Try it now
 
-- Frontend: **<https://healthcare-appointment-manager-beta.vercel.app>**
-- API: **<https://healthcare-appointment-manager-5olh.onrender.com>** (health check:
-  `/api/health`)
+- **App:** <https://healthcare-appointment-manager-beta.vercel.app>
+- **API health check:** <https://healthcare-appointment-manager-5olh.onrender.com/api/health>
+
+This is one of 13 seeded doctors and one of 3 seeded patients — the rest, plus the admin
+tooling to manage them, are visible once logged in as admin below.
+
+| Role | Email | Password |
+|---|---|---|
+| Admin | `admin@clinicdemo.local` | `ClinicOps#2026` |
+| Doctor | `iram.khan@clinicdemo.local` | `RoundsAt9!` |
+| Patient | `aisha.rahman@clinicdemo.local` | `WaitingRoom7` |
+
+(Verified against the live API above at time of writing. Every seeded account lives on one
+reserved, non-resolving domain, `@clinicdemo.local`, so a misconfigured SMTP setup can never
+bounce mail at a real registrant — see "Seed data" below for the full roster and how it's
+generated.)
 
 Stack: Render (Oregon/US West) + Vercel + Neon Postgres (Oregon). Full deployment details, the
 real settings used, and every issue hit getting there: [`docs/deployment.md`](docs/deployment.md).
 
 ![Patient home — find a doctor](https://raw.githubusercontent.com/kamil-ctr/healthcare-appointment-manager/main/docs/screenshots/home-doctor-search.png)
 
-**Demo credentials** (seeded by `server/scripts/seed-demo.js`; every seeded account lives on
-one reserved, non-resolving domain, `@clinicdemo.local`, so a misconfigured SMTP setup can never
-bounce mail at a real registrant. Each role has its own password - the three below, not one
-password shared by everyone):
-
-| Role | Email | Password |
-|---|---|---|
-| Admin | `admin@clinicdemo.local` | `ClinicOps#2026` |
-| Doctor (any of the 13 below) | `firstname.lastname@clinicdemo.local` | `RoundsAt9!` |
-| Patient | `aisha.rahman@clinicdemo.local` / `karan.gupta@clinicdemo.local` / `neha.iyer@clinicdemo.local` | `WaitingRoom7` |
-
-**Doctor roster** (13 doctors across 7 specialisations, each with its own fee, slot length, and
-weekly schedule - not copy-pasted):
+**Full doctor roster** (13 doctors across 7 specialisations, each with its own fee, slot length,
+and weekly schedule - not copy-pasted; any of them logs in with the same doctor password above):
 
 | Doctor | Specialisation | Fee | Slot | Notes |
 |---|---|---|---|---|
@@ -56,7 +58,8 @@ Organized by system area, not build order.
 
 - **Auth & access control** — JWT signed with `node:crypto` HMAC-SHA256 (not `jsonwebtoken`),
   scrypt password hashing, role-scoped middleware (`requireAuth`/`requireRole`) on every
-  protected route.
+  protected route, and a 15-minute client-side idle timeout (`web/src/components/
+  IdleTimeoutWarning.jsx`) that warns the user before signing them out.
 - **Admin portal** — doctor CRUD, weekly availability (applied atomically, never partially),
   leave-day cascade (`services/leave.js`) that cancels affected appointments and notifies both
   sides inside one transaction.
